@@ -9,6 +9,16 @@ This framework provides:
 - Comprehensive test reporting (CSV, JSON, HTML, text)
 - Configurable test parameters via JSON
 - Multi-DUT support and scaling capabilities
+- Interactive menu-based interface for user-friendly operation
+- Command-line interface for automation and scripting
+
+Key Features:
+- Menu-driven interface when no arguments provided
+- Template-based test configuration system
+- Comprehensive logging with multiple output files
+- Log parsing and historical data analysis
+- Multiple output formats for reports
+- Hardware abstraction for different power supply types
 
 Author: Automated Test Framework
 Version: 1.0.0
@@ -26,33 +36,50 @@ from lib.report_generator import ReportGenerator
 
 
 def setup_argument_parser():
-    """Setup command line argument parser."""
+    """
+    Setup command line argument parser with all available options.
+    
+    This function creates an ArgumentParser instance with comprehensive
+    command-line options for the framework. It includes options for:
+    - Configuration file management
+    - Test execution modes
+    - Logging and output control
+    - Template and pattern management
+    - Log analysis functionality
+    
+    Returns:
+        argparse.ArgumentParser: Configured argument parser instance
+    """
     parser = argparse.ArgumentParser(
         description="Automated Power Cycle and UART Validation Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                          # Run with default config.json
+  python main.py                          # Show interactive menu
   python main.py -c my_config.json        # Run with custom config
   python main.py --interactive            # Interactive mode with prompts
   python main.py --validate-config        # Validate configuration file
   python main.py --list-patterns          # List available validation patterns
   python main.py --generate-config        # Generate sample configuration
+  python main.py --parse-logs             # Analyze existing log files
         """
     )
     
+    # Configuration file options
     parser.add_argument(
         '-c', '--config',
         default='config/config.json',
         help='Configuration file path (default: config/config.json)'
     )
     
+    # Test execution modes
     parser.add_argument(
         '--interactive',
         action='store_true',
         help='Run in interactive mode with user prompts'
     )
     
+    # Configuration management options
     parser.add_argument(
         '--validate-config',
         action='store_true',
@@ -71,6 +98,7 @@ Examples:
         help='Generate sample configuration file and exit'
     )
     
+    # Template management options
     parser.add_argument(
         '--list-templates',
         action='store_true',
@@ -83,6 +111,7 @@ Examples:
         help='Generate sample test templates file and exit'
     )
     
+    # Log analysis options
     parser.add_argument(
         '--parse-logs',
         action='store_true',
@@ -95,6 +124,7 @@ Examples:
         help='Directory containing log files (default: ./output/logs)'
     )
     
+    # Logging and output control
     parser.add_argument(
         '--log-level',
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
@@ -124,16 +154,33 @@ Examples:
 
 def validate_config(config_file: str) -> bool:
     """
-    Validate configuration file.
+    Validate configuration file structure and content.
     
-    :param config_file: Path to configuration file
-    :return: True if valid, False otherwise
+    This function performs comprehensive validation of the configuration file
+    to ensure it contains all required sections and fields. It validates:
+    - Required top-level sections (power_supply, uart_loggers, tests)
+    - Power supply configuration (GPIB resource or RS232 port)
+    - UART logger configuration (port, baud rate)
+    - Test configuration (name, cycles, patterns)
+    - Pattern validation (regex patterns)
+    
+    Args:
+        config_file (str): Path to the configuration file to validate
+        
+    Returns:
+        bool: True if configuration is valid, False otherwise
+        
+    Raises:
+        FileNotFoundError: If configuration file doesn't exist
+        json.JSONDecodeError: If configuration file contains invalid JSON
+        Exception: For other validation errors
     """
     try:
+        # Load and parse the JSON configuration file
         with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Check required sections
+        # Validate required top-level sections exist
         required_sections = ['power_supply', 'uart_loggers', 'tests']
         missing_sections = [section for section in required_sections if section not in config]
         
@@ -141,35 +188,40 @@ def validate_config(config_file: str) -> bool:
             print(f"❌ Missing required configuration sections: {missing_sections}")
             return False
         
-        # Validate power_supply
+        # Validate power supply configuration
+        # Must have either 'resource' (GPIB) or 'port' (RS232)
         ps_config = config['power_supply']
         if 'resource' not in ps_config and 'port' not in ps_config:
             print("❌ power_supply must have either 'resource' (GPIB) or 'port' (RS232)")
             return False
         
-        # Validate uart_loggers
+        # Validate UART loggers configuration
+        # Must be a non-empty list with port and baud rate
         uart_loggers = config['uart_loggers']
         if not isinstance(uart_loggers, list) or len(uart_loggers) == 0:
             print("❌ uart_loggers must be a non-empty list")
             return False
         
+        # Validate each UART logger has required fields
         for i, logger in enumerate(uart_loggers):
             if 'port' not in logger or 'baud' not in logger:
                 print(f"❌ UART logger {i} missing required fields: 'port' and 'baud'")
                 return False
         
-        # Validate tests
+        # Validate tests configuration
+        # Must be a non-empty list with test definitions
         tests = config['tests']
         if not isinstance(tests, list) or len(tests) == 0:
             print("❌ tests must be a non-empty list")
             return False
         
+        # Validate each test has required fields and patterns
         for i, test in enumerate(tests):
             if 'name' not in test or 'cycles' not in test:
                 print(f"❌ Test {i} missing required fields: 'name' and 'cycles'")
                 return False
             
-            # Validate uart_patterns if present
+            # Validate UART patterns if present
             patterns = test.get('uart_patterns', [])
             for j, pattern in enumerate(patterns):
                 if 'regex' not in pattern:
@@ -393,7 +445,29 @@ def modify_config_for_args(config: dict, args) -> dict:
 
 
 def show_main_menu():
-    """Display the main menu and handle user selections."""
+    """
+    Display the main menu and handle user selections.
+    
+    This function provides the primary interface for users who run the
+    application without command-line arguments. It displays a hierarchical
+    menu system with the following main categories:
+    - Run Tests: Execute interactive or automated tests
+    - Configuration Management: Generate, validate, and manage configs
+    - Log Analysis: Parse and analyze existing log files
+    - Help & Documentation: Access help and project information
+    - Exit: Clean exit from the application
+    
+    The menu runs in a loop until the user selects exit or interrupts
+    with Ctrl+C. Each menu option leads to specialized sub-menus that
+    provide focused functionality for specific tasks.
+    
+    Features:
+    - Clear visual formatting with separators
+    - Numbered options for easy selection
+    - Error handling for invalid inputs
+    - Keyboard interrupt support (Ctrl+C)
+    - Graceful error handling and recovery
+    """
     while True:
         print("\n" + "=" * 60)
         print("AUTOMATED POWER CYCLE AND UART VALIDATION FRAMEWORK")
@@ -786,17 +860,55 @@ def show_quick_start_guide():
 
 
 def main():
-    """Main entry point."""
+    """
+    Main entry point for the Automated Power Cycle and UART Validation Framework.
+    
+    This function serves as the primary entry point and handles both menu-based
+    and command-line operation modes:
+    
+    Menu Mode (no arguments):
+    - Displays interactive menu system
+    - Provides guided workflow for users
+    - Handles all functionality through menus
+    
+    CLI Mode (with arguments):
+    - Processes command-line arguments
+    - Executes specific functionality directly
+    - Supports automation and scripting
+    
+    The function performs the following operations:
+    1. Parse command-line arguments
+    2. Determine operation mode (menu vs CLI)
+    3. Execute appropriate functionality
+    4. Handle errors and cleanup
+    
+    Command-line arguments support:
+    - Configuration file management
+    - Test execution (interactive/automated)
+    - Template and pattern management
+    - Log analysis and reporting
+    - Output and logging control
+    
+    Error handling includes:
+    - Configuration validation
+    - File system errors
+    - Hardware connection issues
+    - User interruption (Ctrl+C)
+    - Unexpected exceptions
+    """
+    # Parse command-line arguments
     parser = setup_argument_parser()
     args = parser.parse_args()
     
-    # Check if any arguments were passed
+    # Determine operation mode based on arguments
+    # If no arguments provided, show interactive menu
     if len(sys.argv) == 1:
         # No arguments passed, show menu
         show_main_menu()
         return
     
-    # Handle special commands
+    # Handle special command-line operations that exit immediately
+    # These commands don't require full test execution
     if args.validate_config:
         success = validate_config(args.config)
         sys.exit(0 if success else 1)
@@ -821,48 +933,54 @@ def main():
         parse_existing_logs(args.log_dir)
         sys.exit(0)
     
-    # Check if config file exists
+    # Validate configuration file exists and is valid
     if not Path(args.config).exists():
         print(f"❌ Configuration file not found: {args.config}")
         print("Use --generate-config to create a sample configuration file.")
         sys.exit(1)
     
-    # Validate configuration
+    # Validate configuration file structure and content
     if not validate_config(args.config):
         sys.exit(1)
     
     try:
-        # Load and modify configuration
+        # Load configuration file and apply command-line overrides
         with open(args.config, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
+        # Apply command-line argument overrides to configuration
         config = modify_config_for_args(config, args)
         
-        # Create test runner
+        # Initialize test runner with configuration
         runner = PowerCycleTestRunner()
         runner.config = config  # Override config
         
-        # Setup logging
+        # Configure logging system with specified level
         logging.basicConfig(
             level=getattr(logging, args.log_level),
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         
-        # Run test
+        # Execute tests based on mode (interactive vs automated)
         if args.interactive:
+            # Interactive mode: User-guided test execution with prompts
             runner.run_interactive_test()
         else:
+            # Automated mode: Direct test execution without user interaction
             print("Starting automated power cycle and UART validation test...")
             print(f"Configuration: {args.config}")
             print(f"Log Level: {args.log_level}")
             
+            # Initialize hardware components and connections
             if not runner.initialize_components():
                 print("❌ Failed to initialize components")
                 sys.exit(1)
             
             try:
+                # Execute the test suite and collect results
                 results = runner.run_test()
                 
+                # Process and display test results
                 if 'error' in results:
                     print(f"❌ Test failed: {results['error']}")
                     sys.exit(1)
@@ -871,18 +989,22 @@ def main():
                     print(f"Success Rate: {results['success_rate']:.2%}")
                     print(f"Successful Cycles: {results['successful_cycles']}/{results['total_cycles']}")
                     
+                    # Display generated report files
                     if results.get('report_files'):
                         print(f"\nReports generated:")
                         for format_type, filepath in results['report_files'].items():
                             print(f"  {format_type.upper()}: {filepath}")
             
             finally:
+                # Ensure proper cleanup of hardware connections
                 runner.cleanup_components()
     
     except KeyboardInterrupt:
+        # Handle user interruption (Ctrl+C) gracefully
         print("\n⚠️  Test interrupted by user")
         sys.exit(1)
     except Exception as e:
+        # Handle unexpected errors with detailed logging
         print(f"❌ Unexpected error: {e}")
         logging.exception("Unexpected error in main")
         sys.exit(1)

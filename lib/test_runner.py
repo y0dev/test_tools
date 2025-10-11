@@ -1,3 +1,30 @@
+#!/usr/bin/env python3
+"""
+Power Cycle Test Runner
+
+Main orchestrator for automated power cycling and UART validation tests.
+This module serves as the central coordinator for the entire test framework,
+managing hardware control, test execution, data collection, and reporting.
+
+Key Responsibilities:
+- Initialize and manage hardware components (power supply, UART)
+- Execute test cycles with power cycling and UART validation
+- Coordinate pattern validation and data collection
+- Generate comprehensive test reports
+- Handle template-based test configuration
+- Provide comprehensive logging and error handling
+
+Architecture:
+- Uses factory pattern for power supply initialization
+- Supports multiple UART loggers for concurrent data collection
+- Implements template-based test configuration system
+- Provides both interactive and automated execution modes
+- Integrates comprehensive logging for debugging and analysis
+
+Author: Automated Test Framework
+Version: 1.0.0
+"""
+
 import time
 import json
 import logging
@@ -5,6 +32,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
+# Core framework imports
 from lib.power_supply import PowerSupplyFactory
 from lib.uart_handler import UARTHandler, UARTDataLogger
 from lib.pattern_validator import PatternValidator, ValidationResult
@@ -17,14 +45,61 @@ from lib.comprehensive_logger import ComprehensiveLogger
 class PowerCycleTestRunner:
     """
     Main test runner that orchestrates power cycling and UART validation.
-    Coordinates all components to perform automated testing cycles.
+    
+    This class serves as the central coordinator for the entire test framework.
+    It manages the complete test lifecycle from initialization through cleanup,
+    coordinating all hardware components and data collection processes.
+    
+    Key Features:
+    - Hardware abstraction and management
+    - Template-based test configuration
+    - Multi-threaded UART data collection
+    - Comprehensive logging and error handling
+    - Interactive and automated execution modes
+    - Real-time test progress monitoring
+    
+    Architecture:
+    - Uses factory pattern for power supply initialization
+    - Supports multiple concurrent UART connections
+    - Implements template resolution for test configuration
+    - Provides comprehensive logging across all components
+    - Handles graceful error recovery and cleanup
+    
+    Usage:
+        runner = PowerCycleTestRunner()
+        runner.config = config_dict
+        runner.initialize_components()
+        results = runner.run_test()
+        runner.cleanup_components()
     """
     
     def __init__(self, config_file: str = "config.json"):
         """
         Initialize the test runner with configuration.
         
-        :param config_file: Path to configuration JSON file
+        This constructor sets up the test runner with default configuration
+        and initializes all internal state variables. The actual configuration
+        loading and component initialization happens in separate methods to
+        allow for flexible configuration management.
+        
+        Args:
+            config_file (str): Path to configuration JSON file (optional)
+            
+        Attributes:
+            config_file (str): Path to configuration file
+            config (dict): Loaded configuration dictionary
+            power_supply: Power supply control instance
+            uart_handlers (list): List of UART handler instances
+            uart_loggers (list): List of UART data logger instances
+            pattern_validator: Pattern validation instance
+            test_logger: Test data logging instance
+            report_generator: Report generation instance
+            template_loader: Test template management instance
+            comprehensive_logger: Multi-file logging instance
+            is_running (bool): Test execution state flag
+            current_cycle (int): Current test cycle number
+            current_test_index (int): Current test index in test list
+            test_results (list): Collected test results
         """
         self.config_file = config_file
         self.config = self._load_config()
