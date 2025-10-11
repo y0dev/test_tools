@@ -392,10 +392,409 @@ def modify_config_for_args(config: dict, args) -> dict:
     return modified_config
 
 
+def show_main_menu():
+    """Display the main menu and handle user selections."""
+    while True:
+        print("\n" + "=" * 60)
+        print("AUTOMATED POWER CYCLE AND UART VALIDATION FRAMEWORK")
+        print("=" * 60)
+        print()
+        print("Main Menu:")
+        print("1. Run Tests")
+        print("2. Configuration Management")
+        print("3. Log Analysis")
+        print("4. Help & Documentation")
+        print("5. Exit")
+        print()
+        
+        try:
+            choice = input("Select an option (1-5): ").strip()
+            
+            if choice == '1':
+                run_tests_menu()
+            elif choice == '2':
+                configuration_menu()
+            elif choice == '3':
+                log_analysis_menu()
+            elif choice == '4':
+                help_menu()
+            elif choice == '5':
+                print("Goodbye!")
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-5.")
+                
+        except KeyboardInterrupt:
+            print("\n\nGoodbye!")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def run_tests_menu():
+    """Menu for running tests."""
+    while True:
+        print("\n" + "-" * 40)
+        print("RUN TESTS")
+        print("-" * 40)
+        print("1. Run Interactive Test")
+        print("2. Run Automated Test")
+        print("3. Validate Configuration")
+        print("4. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-4): ").strip()
+            
+            if choice == '1':
+                run_interactive_test()
+            elif choice == '2':
+                run_automated_test()
+            elif choice == '3':
+                validate_configuration()
+            elif choice == '4':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-4.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def configuration_menu():
+    """Menu for configuration management."""
+    while True:
+        print("\n" + "-" * 40)
+        print("CONFIGURATION MANAGEMENT")
+        print("-" * 40)
+        print("1. Generate Sample Configuration")
+        print("2. Generate Sample Templates")
+        print("3. List Available Templates")
+        print("4. List Validation Patterns")
+        print("5. Validate Configuration")
+        print("6. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-6): ").strip()
+            
+            if choice == '1':
+                generate_sample_config()
+                input("\nPress Enter to continue...")
+            elif choice == '2':
+                generate_sample_templates()
+                input("\nPress Enter to continue...")
+            elif choice == '3':
+                list_test_templates()
+                input("\nPress Enter to continue...")
+            elif choice == '4':
+                list_validation_patterns()
+                input("\nPress Enter to continue...")
+            elif choice == '5':
+                validate_configuration()
+            elif choice == '6':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-6.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def log_analysis_menu():
+    """Menu for log analysis."""
+    while True:
+        print("\n" + "-" * 40)
+        print("LOG ANALYSIS")
+        print("-" * 40)
+        print("1. Parse Existing Logs")
+        print("2. Parse Logs from Custom Directory")
+        print("3. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-3): ").strip()
+            
+            if choice == '1':
+                parse_existing_logs('./output/logs')
+                input("\nPress Enter to continue...")
+            elif choice == '2':
+                log_dir = input("Enter log directory path: ").strip()
+                if log_dir:
+                    parse_existing_logs(log_dir)
+                else:
+                    print("❌ No directory specified.")
+                input("\nPress Enter to continue...")
+            elif choice == '3':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-3.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def help_menu():
+    """Menu for help and documentation."""
+    while True:
+        print("\n" + "-" * 40)
+        print("HELP & DOCUMENTATION")
+        print("-" * 40)
+        print("1. Show Command Line Help")
+        print("2. Show Project Structure")
+        print("3. Show Quick Start Guide")
+        print("4. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-4): ").strip()
+            
+            if choice == '1':
+                show_command_line_help()
+            elif choice == '2':
+                show_project_structure()
+            elif choice == '3':
+                show_quick_start_guide()
+            elif choice == '4':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-4.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def run_interactive_test():
+    """Run interactive test."""
+    try:
+        config_file = get_config_file()
+        if not config_file:
+            return
+            
+        print(f"Running interactive test with config: {config_file}")
+        
+        # Load configuration
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Create test runner
+        runner = PowerCycleTestRunner()
+        runner.config = config
+        
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Run interactive test
+        runner.run_interactive_test()
+        
+    except Exception as e:
+        print(f"❌ Error running interactive test: {e}")
+
+
+def run_automated_test():
+    """Run automated test."""
+    try:
+        config_file = get_config_file()
+        if not config_file:
+            return
+            
+        print(f"Running automated test with config: {config_file}")
+        
+        # Load configuration
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Create test runner
+        runner = PowerCycleTestRunner()
+        runner.config = config
+        
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Initialize and run test
+        if not runner.initialize_components():
+            print("❌ Failed to initialize components")
+            return
+        
+        try:
+            results = runner.run_test()
+            
+            if 'error' in results:
+                print(f"❌ Test failed: {results['error']}")
+            else:
+                print(f"✅ Test completed successfully!")
+                print(f"Success Rate: {results['success_rate']:.2%}")
+                print(f"Successful Cycles: {results['successful_cycles']}/{results['total_cycles']}")
+                
+                if results.get('report_files'):
+                    print(f"\nReports generated:")
+                    for format_type, filepath in results['report_files'].items():
+                        print(f"  {format_type.upper()}: {filepath}")
+        
+        finally:
+            runner.cleanup_components()
+        
+    except Exception as e:
+        print(f"❌ Error running automated test: {e}")
+
+
+def validate_configuration():
+    """Validate configuration file."""
+    config_file = get_config_file()
+    if config_file:
+        success = validate_config(config_file)
+        if success:
+            print("✅ Configuration is valid!")
+        else:
+            print("❌ Configuration has errors.")
+        input("\nPress Enter to continue...")
+
+
+def get_config_file():
+    """Get configuration file path from user."""
+    default_config = "config/config.json"
+    
+    if Path(default_config).exists():
+        use_default = input(f"Use default config ({default_config})? (y/n): ").strip().lower()
+        if use_default in ['y', 'yes', '']:
+            return default_config
+    
+    config_file = input("Enter configuration file path: ").strip()
+    if not config_file:
+        print("❌ No configuration file specified.")
+        return None
+    
+    if not Path(config_file).exists():
+        print(f"❌ Configuration file not found: {config_file}")
+        return None
+    
+    return config_file
+
+
+def show_command_line_help():
+    """Show command line help."""
+    print("\n" + "=" * 60)
+    print("COMMAND LINE HELP")
+    print("=" * 60)
+    print()
+    print("Usage: python main.py [options]")
+    print()
+    print("Options:")
+    print("  -c, --config FILE        Configuration file path")
+    print("  --interactive             Run in interactive mode")
+    print("  --validate-config         Validate configuration file")
+    print("  --list-patterns           List validation patterns")
+    print("  --generate-config         Generate sample configuration")
+    print("  --list-templates          List test templates")
+    print("  --generate-templates      Generate sample templates")
+    print("  --parse-logs              Parse existing log files")
+    print("  --log-dir DIR             Log directory path")
+    print("  --log-level LEVEL         Set logging level")
+    print("  --cycles N                Override number of cycles")
+    print("  --dry-run                 Perform dry run")
+    print("  --output-dir DIR           Override output directory")
+    print("  -h, --help                Show this help message")
+    print()
+    print("Examples:")
+    print("  python main.py                           # Show menu")
+    print("  python main.py --interactive            # Interactive mode")
+    print("  python main.py -c config/my_config.json # Custom config")
+    print("  python main.py --parse-logs             # Parse logs")
+    print()
+    input("Press Enter to continue...")
+
+
+def show_project_structure():
+    """Show project structure."""
+    print("\n" + "=" * 60)
+    print("PROJECT STRUCTURE")
+    print("=" * 60)
+    print()
+    print("test_tool/")
+    print("├── main.py                    # Main CLI entry point")
+    print("├── requirements.txt           # Python dependencies")
+    print("├── README.md                  # Project overview")
+    print("├── config/                    # Configuration files")
+    print("│   ├── config.json           # Main configuration")
+    print("│   ├── test_templates.json   # Test templates")
+    print("│   └── example_*.json        # Example configurations")
+    print("├── lib/                      # Core framework modules")
+    print("│   ├── test_runner.py       # Main test orchestrator")
+    print("│   ├── power_supply.py      # Power supply control")
+    print("│   ├── uart_handler.py      # UART communication")
+    print("│   ├── pattern_validator.py # Pattern validation")
+    print("│   ├── test_logger.py       # Test logging")
+    print("│   ├── report_generator.py  # Report generation")
+    print("│   ├── test_template_loader.py # Template system")
+    print("│   ├── comprehensive_logger.py # Multi-file logging")
+    print("│   └── log_parser.py         # Log analysis")
+    print("├── examples/                 # Example scripts")
+    print("├── docs/                     # Documentation")
+    print("├── scripts/                  # Utility scripts")
+    print("└── output/                   # Generated output")
+    print("    ├── logs/                # Log files")
+    print("    └── reports/             # Test reports")
+    print()
+    input("Press Enter to continue...")
+
+
+def show_quick_start_guide():
+    """Show quick start guide."""
+    print("\n" + "=" * 60)
+    print("QUICK START GUIDE")
+    print("=" * 60)
+    print()
+    print("1. Generate Sample Files:")
+    print("   python main.py --generate-config")
+    print("   python main.py --generate-templates")
+    print()
+    print("2. Edit Configuration:")
+    print("   - config/config.json - Hardware settings")
+    print("   - config/test_templates.json - Test definitions")
+    print()
+    print("3. Run Tests:")
+    print("   python main.py --interactive")
+    print("   # or just: python main.py")
+    print()
+    print("4. Analyze Results:")
+    print("   python main.py --parse-logs")
+    print()
+    print("5. View Examples:")
+    print("   python examples/template_demo.py")
+    print("   python examples/log_parsing_demo.py")
+    print()
+    print("6. Read Documentation:")
+    print("   - docs/README.md - Detailed documentation")
+    print("   - docs/configuration_guide.md - Configuration guide")
+    print("   - docs/usage_guide.md - Usage instructions")
+    print()
+    input("Press Enter to continue...")
+
+
 def main():
     """Main entry point."""
     parser = setup_argument_parser()
     args = parser.parse_args()
+    
+    # Check if any arguments were passed
+    if len(sys.argv) == 1:
+        # No arguments passed, show menu
+        show_main_menu()
+        return
     
     # Handle special commands
     if args.validate_config:
