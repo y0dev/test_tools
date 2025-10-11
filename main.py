@@ -705,8 +705,10 @@ def run_automated_test():
             return
         
         try:
+            # Attempt to run test
             results = runner.run_test()
             
+            # Display test results
             if 'error' in results:
                 print(f"❌ Test failed: {results['error']}")
             else:
