@@ -1,0 +1,63 @@
+{
+  "power_supply": {
+    "resource": "GPIB0::5::INSTR",
+    "voltage": 5.0,
+    "current_limit": 0.5
+  },
+  "uart_loggers": [
+    {
+      "port": "COM3",
+      "baud": 115200,
+      "display": true
+    }
+  ],
+  "tests": [
+    {
+      "name": "temperature_monitoring_test",
+      "test_type": "custom",
+      "cycles": 3,
+      "on_time": 10,
+      "off_time": 5,
+      "output_format": "json",
+      "temperature_settings": {
+        "min_temperature": 20.0,
+        "max_temperature": 80.0,
+        "temperature_tolerance": 2.0,
+        "monitoring_interval": 0.5
+      }
+    },
+    {
+      "name": "voltage_stability_test",
+      "test_type": "custom",
+      "cycles": 5,
+      "on_time": 15,
+      "off_time": 3,
+      "output_format": "excel",
+      "voltage_settings": {
+        "target_voltage": 5.0,
+        "voltage_tolerance": 0.1,
+        "measurement_interval": 1.0,
+        "stability_time": 10.0
+      }
+    },
+    {
+      "name": "boot_sequence_test",
+      "cycles": 2,
+      "on_time": 8,
+      "off_time": 4,
+      "output_format": "xml",
+      "uart_patterns": [
+        {
+          "name": "boot_start",
+          "regex": "Boot sequence started",
+          "expected": ["Boot sequence started"]
+        },
+        {
+          "name": "system_ready",
+          "regex": "System ready",
+          "expected": ["System ready"]
+        }
+      ]
+    }
+  ]
+}

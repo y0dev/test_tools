@@ -1,0 +1,169 @@
+{
+  "test_templates": {
+    "temperature_monitoring_test": {
+      "description": "Monitor device temperature during power cycling",
+      "test_type": "custom",
+      "temperature_settings": {
+        "min_temperature": 20.0,
+        "max_temperature": 80.0,
+        "temperature_tolerance": 2.0,
+        "monitoring_interval": 0.5
+      },
+      "output_format": "json"
+    },
+    "voltage_stability_test": {
+      "description": "Test voltage stability during power cycling",
+      "test_type": "custom",
+      "voltage_settings": {
+        "target_voltage": 5.0,
+        "voltage_tolerance": 0.1,
+        "measurement_interval": 1.0,
+        "stability_time": 10.0
+      },
+      "output_format": "excel"
+    },
+    "current_consumption_test": {
+      "description": "Monitor current consumption patterns",
+      "test_type": "custom",
+      "current_settings": {
+        "max_current": 0.5,
+        "current_tolerance": 0.05,
+        "measurement_interval": 0.5,
+        "peak_detection": true
+      },
+      "output_format": "csv"
+    },
+    "json_validation_test": {
+      "description": "Validate JSON data structure from device",
+      "uart_patterns": [
+        {
+          "name": "json_status",
+          "type": "json_structure",
+          "required_fields": ["status", "code", "message"],
+          "field_checks": {
+            "status": "OK",
+            "code": 200
+          }
+        }
+      ],
+      "output_format": "json"
+    },
+    "numeric_range_test": {
+      "description": "Validate numeric values within ranges",
+      "uart_patterns": [
+        {
+          "name": "voltage_check",
+          "type": "numeric_range",
+          "value_pattern": "Voltage:\\s*(\\d+\\.\\d+)",
+          "min_value": 4.8,
+          "max_value": 5.2
+        },
+        {
+          "name": "current_check",
+          "type": "numeric_range",
+          "value_pattern": "Current:\\s*(\\d+\\.\\d+)",
+          "min_value": 0.0,
+          "max_value": 0.6
+        }
+      ],
+      "output_format": "yaml"
+    },
+    "checksum_validation_test": {
+      "description": "Validate data integrity using checksums",
+      "uart_patterns": [
+        {
+          "name": "data_checksum",
+          "type": "custom_algorithm",
+          "algorithm": "checksum",
+          "parameters": {
+            "checksum_type": "crc16",
+            "expected_checksum": 12345
+          }
+        }
+      ],
+      "output_format": "xml"
+    },
+    "time_based_test": {
+      "description": "Validate time-based patterns and sequences",
+      "uart_patterns": [
+        {
+          "name": "timestamp_check",
+          "type": "time_based",
+          "time_pattern": "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2})",
+          "min_time": "2024-01-01 00:00:00",
+          "max_time": "2024-12-31 23:59:59"
+        }
+      ],
+      "output_format": "text"
+    },
+    "sequence_validation_test": {
+      "description": "Validate command sequence execution",
+      "uart_patterns": [
+        {
+          "name": "command_sequence",
+          "type": "custom_algorithm",
+          "algorithm": "sequence",
+          "parameters": {
+            "sequence_pattern": "(\\w+)",
+            "expected_sequence": ["INIT", "CONFIG", "START", "READY"]
+          }
+        }
+      ],
+      "output_format": "html"
+    },
+    "hash_validation_test": {
+      "description": "Validate data integrity using hash algorithms",
+      "uart_patterns": [
+        {
+          "name": "data_hash",
+          "type": "custom_algorithm",
+          "algorithm": "hash",
+          "parameters": {
+            "hash_type": "sha256",
+            "expected_hash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3"
+          }
+        }
+      ],
+      "output_format": "json"
+    },
+    "comprehensive_test": {
+      "description": "Comprehensive test with multiple validation types",
+      "uart_patterns": [
+        {
+          "name": "boot_ready",
+          "regex": "READY",
+          "expected": ["READY"]
+        },
+        {
+          "name": "voltage_range",
+          "type": "numeric_range",
+          "value_pattern": "V:\\s*(\\d+\\.\\d+)",
+          "min_value": 4.9,
+          "max_value": 5.1
+        },
+        {
+          "name": "status_json",
+          "type": "json_structure",
+          "required_fields": ["status"],
+          "field_checks": {
+            "status": "OK"
+          }
+        }
+      ],
+      "output_format": "comprehensive"
+    }
+  },
+  "defaults": {
+    "cycles": 1,
+    "on_time": 5,
+    "off_time": 3,
+    "output_format": "json"
+  },
+  "output": {
+    "log_directory": "./output/logs",
+    "report_directory": "./output/reports",
+    "detailed_logs": true,
+    "timestamp_format": "%Y-%m-%d_%H-%M-%S",
+    "log_level": "INFO"
+  }
+}
