@@ -51,7 +51,7 @@ This quick reference provides essential information for creating custom tests an
 ### 1. Create Custom Test Handler
 
 ```python
-# lib/custom_test_handler.py
+# libs/custom_test_handler.py
 class CustomTestHandler:
     def __init__(self, config):
         self.config = config
@@ -70,7 +70,7 @@ class CustomTestHandler:
 ### 2. Integrate with Test Runner
 
 ```python
-# lib/test_runner.py
+# libs/test_runner.py
 def run_custom_test(self, test_config):
     custom_handler = CustomTestHandler(self.config)
     return custom_handler.execute_custom_test(test_config)
@@ -81,7 +81,7 @@ def run_custom_test(self, test_config):
 ### 1. Create Custom Report Generator
 
 ```python
-# lib/custom_report_generator.py
+# libs/custom_report_generator.py
 class CustomReportGenerator:
     def generate_xml_report(self, test_summary, cycle_data, uart_data):
         # Generate XML report
@@ -99,7 +99,7 @@ class CustomReportGenerator:
 ### 2. Integrate with Report Generator
 
 ```python
-# lib/report_generator.py
+# libs/report_generator.py
 def generate_custom_report(self, test_summary, cycle_data, uart_data, format_type):
     custom_generator = CustomReportGenerator(self.config, self.logger)
     
@@ -170,7 +170,7 @@ def generate_custom_report(self, test_summary, cycle_data, uart_data, format_typ
 ### 1. Create Custom Power Supply
 
 ```python
-# lib/custom_power_supply.py
+# libs/custom_power_supply.py
 class CustomPowerSupply(PowerSupplyBase):
     def __init__(self, config):
         super().__init__(config)
@@ -192,7 +192,7 @@ class CustomPowerSupply(PowerSupplyBase):
 ### 2. Update Power Supply Factory
 
 ```python
-# lib/power_supply.py
+# libs/power_supply.py
 class PowerSupplyFactory:
     @staticmethod
     def create_power_supply(config):
@@ -384,4 +384,4 @@ class CustomReportGenerator:
 - **Examples**: `examples/custom_temperature_test.py`
 - **Configuration**: `config/custom_test_config.json`
 - **Templates**: `config/custom_test_templates.json`
-- **Framework Code**: `lib/` directory
+- **Framework Code**: `libs/` directory

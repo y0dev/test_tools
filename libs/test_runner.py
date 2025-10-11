@@ -33,13 +33,13 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 # Core framework imports
-from lib.power_supply import PowerSupplyFactory
-from lib.uart_handler import UARTHandler, UARTDataLogger
-from lib.pattern_validator import PatternValidator, ValidationResult
-from lib.test_logger import TestLogger
-from lib.report_generator import ReportGenerator
-from lib.test_template_loader import TestTemplateLoader
-from lib.comprehensive_logger import ComprehensiveLogger
+from libs.power_supply import PowerSupplyFactory
+from libs.uart_handler import UARTHandler, UARTDataLogger
+from libs.pattern_validator import PatternValidator, ValidationResult
+from libs.test_logger import TestLogger
+from libs.report_generator import ReportGenerator
+from libs.test_template_loader import TestTemplateLoader
+from libs.comprehensive_logger import ComprehensiveLogger
 
 
 class PowerCycleTestRunner:

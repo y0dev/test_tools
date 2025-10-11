@@ -6,15 +6,15 @@ The Automated Power Cycle and UART Validation Framework is designed with a modul
 
 ### Core Components
 
-1. **TestRunner** (`lib/test_runner.py`) - Main orchestrator that coordinates all testing activities
-2. **PowerSupply** (`lib/power_supply.py`) - Handles power supply control via GPIB/RS232
-3. **UARTHandler** (`lib/uart_handler.py`) - Manages UART communication and data logging
-4. **PatternValidator** (`lib/pattern_validator.py`) - Validates UART data against expected patterns
-5. **TestLogger** (`lib/test_logger.py`) - Logs test data and results
-6. **ReportGenerator** (`lib/report_generator.py`) - Generates reports in multiple formats
-7. **TestTemplateLoader** (`lib/test_template_loader.py`) - Manages test template system
-8. **ComprehensiveLogger** (`lib/comprehensive_logger.py`) - Multi-file logging system
-9. **LogParser** (`lib/log_parser.py`) - Analyzes existing log files
+1. **TestRunner** (`libs/test_runner.py`) - Main orchestrator that coordinates all testing activities
+2. **PowerSupply** (`libs/power_supply.py`) - Handles power supply control via GPIB/RS232
+3. **UARTHandler** (`libs/uart_handler.py`) - Manages UART communication and data logging
+4. **PatternValidator** (`libs/pattern_validator.py`) - Validates UART data against expected patterns
+5. **TestLogger** (`libs/test_logger.py`) - Logs test data and results
+6. **ReportGenerator** (`libs/report_generator.py`) - Generates reports in multiple formats
+7. **TestTemplateLoader** (`libs/test_template_loader.py`) - Manages test template system
+8. **ComprehensiveLogger** (`libs/comprehensive_logger.py`) - Multi-file logging system
+9. **LogParser** (`libs/log_parser.py`) - Analyzes existing log files
 
 ### Data Flow
 

@@ -29,7 +29,7 @@ test_tool/
 │   ├── config.json           # Main configuration
 │   ├── test_templates.json   # Test template definitions
 │   └── sample_config.json    # Sample configuration
-├── lib/                      # Core framework modules
+├── libs/                     # Core framework modules
 │   ├── comprehensive_logger.py # Multi-file logging system
 │   ├── log_parser.py         # Log file analysis
 │   ├── pattern_validator.py  # UART pattern validation
@@ -212,19 +212,19 @@ python main.py --generate-templates
 
 The framework includes a comprehensive export system with dedicated classes for different output formats:
 
-### CSV Export (`lib/exports/csv_exporter.py`)
+### CSV Export (`libs/exports/csv_exporter.py`)
 - Easy-to-read formatting with proper headers and sections
 - Comprehensive test results with cycle data, UART data, and validation results
 - Simple data export for custom datasets
 - Cycle analysis export with detailed statistics
 
-### JSON Export (`lib/exports/json_exporter.py`)
+### JSON Export (`libs/exports/json_exporter.py`)
 - Structured data organization with metadata
 - Comprehensive statistics and analysis
 - Configuration export capabilities
 - Human-readable formatting with proper indentation
 
-### HTML Export (`lib/exports/html_exporter.py`)
+### HTML Export (`libs/exports/html_exporter.py`)
 - Professional styling with embedded CSS
 - Interactive features with embedded JavaScript
 - Responsive design for different screen sizes
@@ -234,7 +234,7 @@ The framework includes a comprehensive export system with dedicated classes for 
 
 ### Usage Example
 ```python
-from lib.exports import CSVExporter, JSONExporter, HTMLExporter
+from libs.exports import CSVExporter, JSONExporter, HTMLExporter
 
 # Create exporters
 csv_exporter = CSVExporter()

@@ -31,8 +31,8 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-from lib.test_runner import PowerCycleTestRunner
-from lib.report_generator import ReportGenerator
+from libs.test_runner import PowerCycleTestRunner
+from libs.report_generator import ReportGenerator
 
 
 def setup_argument_parser():
@@ -329,7 +329,7 @@ def generate_sample_config():
 def list_test_templates():
     """List available test templates."""
     try:
-        from lib.test_template_loader import TestTemplateLoader
+        from libs.test_template_loader import TestTemplateLoader
         
         loader = TestTemplateLoader()
         loader.list_templates()
@@ -398,7 +398,7 @@ def generate_sample_templates():
 def parse_existing_logs(log_directory: str):
     """Parse existing log files and generate reports."""
     try:
-        from lib.log_parser import LogParser
+        from libs.log_parser import LogParser
         
         parser = LogParser(log_directory)
         
@@ -808,7 +808,7 @@ def show_project_structure():
     print("│   ├── config.json           # Main configuration")
     print("│   ├── test_templates.json   # Test templates")
     print("│   └── example_*.json        # Example configurations")
-    print("├── lib/                      # Core framework modules")
+    print("├── libs/                     # Core framework modules")
     print("│   ├── test_runner.py       # Main test orchestrator")
     print("│   ├── power_supply.py      # Power supply control")
     print("│   ├── uart_handler.py      # UART communication")
