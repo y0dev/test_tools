@@ -1,0 +1,75 @@
+{
+  "test_templates": {
+    "boot_data_test": {
+      "description": "Verify correct boot data is printed",
+      "uart_patterns": [
+        {
+          "regex": "Data:\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+)",
+          "expected": [["0x12345678", "0xDEADBEEF"]]
+        },
+        {
+          "regex": "Version:\\s*v(\\d\\.\\d)",
+          "expected": ["v1.2"]
+        }
+      ],
+      "output_format": "json"
+    },
+    "power_cycle_test": {
+      "description": "Test multiple power cycles",
+      "uart_patterns": [
+        {
+          "regex": "READY",
+          "expected": ["READY"]
+        }
+      ],
+      "output_format": "csv"
+    },
+    "comprehensive_test": {
+      "description": "Full test with all patterns",
+      "uart_patterns": [
+        {
+          "regex": "Boot:\\s*(\\w+)",
+          "expected": ["success"]
+        },
+        {
+          "regex": "Status:\\s*(\\w+)",
+          "expected": ["OK"]
+        }
+      ],
+      "output_format": "html"
+    },
+    "simple_ready_test": {
+      "description": "Simple ready signal test",
+      "uart_patterns": [
+        {
+          "regex": "READY",
+          "expected": ["READY"]
+        }
+      ],
+      "output_format": "text"
+    },
+    "version_check_test": {
+      "description": "Check firmware version",
+      "uart_patterns": [
+        {
+          "regex": "Version:\\s*v(\\d+\\.\\d+)",
+          "expected": ["v1.0", "v1.1", "v1.2"]
+        }
+      ],
+      "output_format": "json"
+    }
+  },
+  "defaults": {
+    "cycles": 1,
+    "on_time": 5,
+    "off_time": 3,
+    "output_format": "json"
+  },
+  "output": {
+    "log_directory": "./output/logs",
+    "report_directory": "./output/reports",
+    "detailed_logs": true,
+    "timestamp_format": "%Y-%m-%d_%H-%M-%S",
+    "log_level": "INFO"
+  }
+}

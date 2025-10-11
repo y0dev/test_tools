@@ -1,0 +1,40 @@
+# Automated Power Cycle and UART Validation Framework
+# Requirements file for Python dependencies
+
+# Core dependencies
+pyserial>=3.5
+numpy>=1.21.0
+
+# GPIB communication support
+pyvisa>=1.11.3
+
+# Optional dependencies for enhanced functionality
+# Uncomment as needed:
+
+# For enhanced data analysis
+# pandas>=1.3.0
+# matplotlib>=3.4.0
+
+# For web-based reporting
+# flask>=2.0.0
+# jinja2>=3.0.0
+
+# For database logging
+# sqlite3  # Built-in with Python
+# sqlalchemy>=1.4.0
+
+# For configuration validation
+# jsonschema>=3.2.0
+
+# For enhanced CLI
+# click>=8.0.0
+# colorama>=0.4.4
+
+# For testing
+# pytest>=6.2.0
+# pytest-cov>=2.12.0
+
+# For development
+# black>=21.0.0
+# flake8>=3.9.0
+# mypy>=0.910

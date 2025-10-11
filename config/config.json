@@ -1,0 +1,29 @@
+{
+  "power_supply": {
+    "resource": "GPIB0::5::INSTR",
+    "voltage": 5.0,
+    "current_limit": 0.5
+  },
+  "uart_loggers": [
+    {
+      "port": "COM3",
+      "baud": 115200,
+      "display": true
+    }
+  ],
+  "tests": [
+    {
+      "name": "boot_data_test"
+    },
+    {
+      "name": "power_cycle_test",
+      "cycles": 3,
+      "on_time": 3,
+      "off_time": 2
+    },
+    {
+      "name": "simple_ready_test",
+      "cycles": 2
+    }
+  ]
+}

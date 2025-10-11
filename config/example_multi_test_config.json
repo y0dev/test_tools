@@ -1,0 +1,66 @@
+{
+  "power_supply": {
+    "resource": "GPIB0::5::INSTR",
+    "voltage": 5.0,
+    "current_limit": 0.5
+  },
+  "uart_loggers": [
+    {
+      "port": "COM3",
+      "baud": 115200,
+      "display": true
+    }
+  ],
+  "tests": [
+    {
+      "name": "Boot Data Test",
+      "description": "Verify correct boot data is printed",
+      "cycles": 1,
+      "on_time": 5,
+      "off_time": 3,
+      "output_format": "json",
+      "uart_patterns": [
+        {
+          "regex": "Data:\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+)",
+          "expected": [["0x12345678", "0xDEADBEEF"]]
+        },
+        {
+          "regex": "Version:\\s*v(\\d\\.\\d)",
+          "expected": ["v1.2"]
+        }
+      ]
+    },
+    {
+      "name": "Power Cycle Test",
+      "description": "Test multiple power cycles",
+      "cycles": 3,
+      "on_time": 3,
+      "off_time": 2,
+      "output_format": "csv",
+      "uart_patterns": [
+        {
+          "regex": "READY",
+          "expected": ["READY"]
+        }
+      ]
+    },
+    {
+      "name": "Comprehensive Test",
+      "description": "Full test with all patterns",
+      "cycles": 2,
+      "on_time": 4,
+      "off_time": 3,
+      "output_format": "html",
+      "uart_patterns": [
+        {
+          "regex": "Boot:\\s*(\\w+)",
+          "expected": ["success"]
+        },
+        {
+          "regex": "Status:\\s*(\\w+)",
+          "expected": ["OK"]
+        }
+      ]
+    }
+  ]
+}
