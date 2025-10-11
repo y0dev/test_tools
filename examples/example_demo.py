@@ -7,9 +7,9 @@ This script shows how to use the framework programmatically for custom test scen
 import json
 import time
 from datetime import datetime
-from lib.test_runner import PowerCycleTestRunner
-from lib.pattern_validator import PatternValidator
-from lib.uart_handler import UARTHandler
+from libs.test_runner import PowerCycleTestRunner
+from libs.pattern_validator import PatternValidator
+from libs.uart_handler import UARTHandler
 
 
 def create_example_config():

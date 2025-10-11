@@ -498,7 +498,7 @@ if __name__ == "__main__":
             logger.log_uart_data(f"Ready signal {cycle}", cycle)
             
             # Simulate validation
-            from lib.pattern_validator import ValidationResult
+            from libs.pattern_validator import ValidationResult
             result = ValidationResult(
                 pattern_name="boot_test",
                 success=True,

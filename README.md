@@ -29,7 +29,7 @@ test_tool/
 │   ├── config.json           # Main configuration
 │   ├── test_templates.json   # Test template definitions
 │   └── sample_config.json    # Sample configuration
-├── lib/                      # Core framework modules
+├── libs/                     # Core framework modules
 │   ├── comprehensive_logger.py # Multi-file logging system
 │   ├── log_parser.py         # Log file analysis
 │   ├── pattern_validator.py  # UART pattern validation
@@ -38,7 +38,12 @@ test_tool/
 │   ├── test_logger.py       # Test data logging
 │   ├── test_runner.py       # Main test orchestrator
 │   ├── test_template_loader.py # Template system
-│   └── uart_handler.py      # UART communication
+│   ├── uart_handler.py      # UART communication
+│   └── exports/             # Export functionality
+│       ├── __init__.py      # Export module initialization
+│       ├── csv_exporter.py  # CSV export with easy-to-read formatting
+│       ├── json_exporter.py # JSON export with structured data
+│       └── html_exporter.py # HTML export with CSS/JS
 ├── examples/                 # Example scripts and demos
 │   ├── template_demo.py     # Template system demo
 │   ├── log_parsing_demo.py  # Log parsing demo
@@ -59,7 +64,8 @@ test_tool/
 - **Test Templates** - Reusable test definitions with defaults
 - **Comprehensive Logging** - Multi-file logging system with detailed operation tracking
 - **Log Analysis** - Parse existing log files without running tests
-- **Multiple Output Formats** - JSON, CSV, HTML, and text reports
+- **Multiple Output Formats** - JSON, CSV, HTML, and text reports with professional styling
+- **Export System** - Dedicated export classes for CSV, JSON, and HTML with embedded CSS/JS
 - **Interactive Mode** - User-friendly test execution
 - **Template System** - Clean configuration with reusable test definitions
 
@@ -146,7 +152,8 @@ python main.py --parse-logs --log-dir ./custom/logs  # Custom log directory
 
 ### Reports (`output/reports/`)
 - `test_results_[timestamp].json` - Test results in JSON format
-- `test_results_[timestamp].csv` - Test results in CSV format
+- `test_results_[timestamp].csv` - Test results in CSV format with easy-to-read formatting
+- `test_results_[timestamp].html` - Interactive HTML reports with embedded CSS and JavaScript
 - `log_analysis_[timestamp].json` - Log analysis results
 - `log_analysis_[timestamp].csv` - Log analysis in CSV format
 
@@ -199,6 +206,45 @@ python main.py --list-templates
 
 # Generate new template file
 python main.py --generate-templates
+```
+
+## 📊 Export System
+
+The framework includes a comprehensive export system with dedicated classes for different output formats:
+
+### CSV Export (`libs/exports/csv_exporter.py`)
+- Easy-to-read formatting with proper headers and sections
+- Comprehensive test results with cycle data, UART data, and validation results
+- Simple data export for custom datasets
+- Cycle analysis export with detailed statistics
+
+### JSON Export (`libs/exports/json_exporter.py`)
+- Structured data organization with metadata
+- Comprehensive statistics and analysis
+- Configuration export capabilities
+- Human-readable formatting with proper indentation
+
+### HTML Export (`libs/exports/html_exporter.py`)
+- Professional styling with embedded CSS
+- Interactive features with embedded JavaScript
+- Responsive design for different screen sizes
+- Data visualization with charts and graphs
+- Collapsible sections for better organization
+- Print-friendly styling
+
+### Usage Example
+```python
+from libs.exports import CSVExporter, JSONExporter, HTMLExporter
+
+# Create exporters
+csv_exporter = CSVExporter()
+json_exporter = JSONExporter()
+html_exporter = HTMLExporter()
+
+# Export test results
+csv_file = csv_exporter.export_test_results(test_summary, cycle_data)
+json_file = json_exporter.export_test_results(test_summary, cycle_data)
+html_file = html_exporter.export_test_results(test_summary, cycle_data)
 ```
 
 ## 📚 Documentation

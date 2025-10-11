@@ -287,7 +287,7 @@ test_tool/
 ├── main.py                 # Main entry point and CLI
 ├── config.json            # Default configuration
 ├── requirements.txt       # Python dependencies
-├── lib/                   # Core framework modules
+├── libs/                   # Core framework modules
 │   ├── power_supply.py    # Power supply control
 │   ├── uart_handler.py    # UART communication
 │   ├── pattern_validator.py # Pattern validation

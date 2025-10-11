@@ -15,7 +15,7 @@ test_tool/
 │   ├── config.json           # Main configuration
 │   ├── test_templates.json   # Test template definitions
 │   └── example_multi_test_config.json # Example configuration
-├── lib/                      # Core framework modules
+├── libs/                      # Core framework modules
 │   ├── comprehensive_logger.py # Multi-file logging system
 │   ├── log_parser.py         # Log file analysis
 │   ├── pattern_validator.py  # UART pattern validation
@@ -55,7 +55,7 @@ test_tool/
 - **`test_templates.json`** - Test template definitions with reusable test patterns
 - **`example_multi_test_config.json`** - Example configuration showing multiple tests
 
-### Core Framework (`lib/`)
+### Core Framework (`libs/`)
 - **`test_runner.py`** - Main orchestrator that coordinates all testing activities
 - **`power_supply.py`** - Power supply control via GPIB/RS232 with factory pattern
 - **`uart_handler.py`** - UART communication and data logging
@@ -90,7 +90,7 @@ test_tool/
 
 ### Separation of Concerns
 - **Configuration** - All configuration files in `config/` directory
-- **Core Logic** - All framework modules in `lib/` directory
+- **Core Logic** - All framework modules in `libs/` directory
 - **Examples** - All demonstration code in `examples/` directory
 - **Documentation** - All documentation in `docs/` directory
 - **Utilities** - All utility scripts in `scripts/` directory

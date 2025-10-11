@@ -110,7 +110,7 @@ The framework automatically resolves templates using this process:
 
 ### Step 1: Create Custom Test Handler
 
-Create a new file `lib/custom_test_handler.py`:
+Create a new file `libs/custom_test_handler.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -214,11 +214,11 @@ class CustomTestHandler:
 
 ### Step 2: Integrate with Test Runner
 
-Modify `lib/test_runner.py` to support custom test types:
+Modify `libs/test_runner.py` to support custom test types:
 
 ```python
 # Add import
-from lib.custom_test_handler import CustomTestHandler
+from libs.custom_test_handler import CustomTestHandler
 
 # Add to PowerCycleTestRunner class
 def run_custom_test(self, test_config: Dict[str, Any]) -> Dict[str, Any]:
@@ -290,7 +290,7 @@ Extend the template system to support custom test types:
 
 ### Step 1: Create Custom Report Generator
 
-Create a new file `lib/custom_report_generator.py`:
+Create a new file `libs/custom_report_generator.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -525,11 +525,11 @@ class CustomReportGenerator:
 
 ### Step 2: Integrate with Report Generator
 
-Modify `lib/report_generator.py` to support custom formats:
+Modify `libs/report_generator.py` to support custom formats:
 
 ```python
 # Add import
-from lib.custom_report_generator import CustomReportGenerator
+from libs.custom_report_generator import CustomReportGenerator
 
 # Add to ReportGenerator class
 def generate_custom_report(self, test_summary: Dict[str, Any], 
@@ -619,7 +619,7 @@ Add support for custom output formats in templates:
 
 ### Step 1: Create New Power Supply Class
 
-Create a new file `lib/custom_power_supply.py`:
+Create a new file `libs/custom_power_supply.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -631,7 +631,7 @@ Example implementation for extending power supply support to new hardware.
 
 import logging
 from typing import Dict, Any, Optional
-from lib.power_supply import PowerSupplyBase
+from libs.power_supply import PowerSupplyBase
 
 
 class CustomPowerSupply(PowerSupplyBase):
@@ -929,11 +929,11 @@ class CustomPowerSupply(PowerSupplyBase):
 
 ### Step 2: Update Power Supply Factory
 
-Modify `lib/power_supply.py` to support custom power supplies:
+Modify `libs/power_supply.py` to support custom power supplies:
 
 ```python
 # Add import
-from lib.custom_power_supply import CustomPowerSupply
+from libs.custom_power_supply import CustomPowerSupply
 
 # Update PowerSupplyFactory class
 class PowerSupplyFactory:
@@ -1004,7 +1004,7 @@ Add support for custom power supply configuration:
 
 ### Step 1: Create Custom Pattern Validator
 
-Create a new file `lib/custom_pattern_validator.py`:
+Create a new file `libs/custom_pattern_validator.py`:
 
 ```python
 #!/usr/bin/env python3
@@ -1401,11 +1401,11 @@ class CustomPatternValidator:
 
 ### Step 2: Integrate with Pattern Validator
 
-Modify `lib/pattern_validator.py` to support custom patterns:
+Modify `libs/pattern_validator.py` to support custom patterns:
 
 ```python
 # Add import
-from lib.custom_pattern_validator import CustomPatternValidator
+from libs.custom_pattern_validator import CustomPatternValidator
 
 # Update PatternValidator class
 class PatternValidator:
@@ -1529,9 +1529,9 @@ Test cases for custom framework extensions.
 
 import unittest
 import json
-from lib.custom_test_handler import CustomTestHandler
-from lib.custom_report_generator import CustomReportGenerator
-from lib.custom_pattern_validator import CustomPatternValidator
+from libs.custom_test_handler import CustomTestHandler
+from libs.custom_report_generator import CustomReportGenerator
+from libs.custom_pattern_validator import CustomPatternValidator
 
 
 class TestCustomExtensions(unittest.TestCase):
@@ -1613,7 +1613,7 @@ import unittest
 import tempfile
 import json
 from pathlib import Path
-from lib.test_runner import PowerCycleTestRunner
+from libs.test_runner import PowerCycleTestRunner
 
 
 class TestCustomIntegration(unittest.TestCase):
