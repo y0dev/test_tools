@@ -1011,77 +1011,235 @@ def parse_serial_data_from_file(log_file):
 
 
 def generate_serial_logger_config():
-    """Generate serial logger configuration."""
+    """Generate serial logger configuration with interactive wizard."""
     try:
-        # Create sample serial logger configuration
-        sample_config = {
+        print("Serial Logger Configuration Wizard")
+        print("=" * 50)
+        print("This wizard will help you create a customized serial logger configuration.")
+        print()
+        
+        # Serial port configuration
+        print("1. Serial Port Configuration")
+        print("-" * 30)
+        port = input("Enter serial port (e.g., COM3, COM1, /dev/ttyUSB0) [COM3]: ").strip()
+        if not port:
+            port = "COM3"
+        
+        baud = input("Enter baud rate [115200]: ").strip()
+        if not baud:
+            baud = 115200
+        else:
+            try:
+                baud = int(baud)
+            except ValueError:
+                baud = 115200
+        
+        timeout = input("Enter timeout in seconds [1.0]: ").strip()
+        if not timeout:
+            timeout = 1.0
+        else:
+            try:
+                timeout = float(timeout)
+            except ValueError:
+                timeout = 1.0
+        
+        print(f"Serial settings: Port={port}, Baud={baud}, Timeout={timeout}")
+        print()
+        
+        # Logging configuration
+        print("2. Logging Configuration")
+        print("-" * 30)
+        log_dir = input("Enter log directory [./output/serial_logs]: ").strip()
+        if not log_dir:
+            log_dir = "./output/serial_logs"
+        
+        use_hierarchy = input("Use date-based directory hierarchy? (y/n) [y]: ").strip().lower()
+        use_hierarchy = use_hierarchy in ['y', 'yes', ''] or use_hierarchy == ''
+        
+        if use_hierarchy:
+            print("Date hierarchy format: YYYY/MM_MMM/MM_DD (e.g., 2025/10_Oct/10_12)")
+            custom_format = input("Enter custom date format (or press Enter for default): ").strip()
+            if not custom_format:
+                custom_format = "%Y/%m_%b/%m_%d"
+        else:
+            custom_format = None
+        
+        print(f"Logging settings: Directory={log_dir}, Hierarchy={use_hierarchy}")
+        print()
+        
+        # Data parsing configuration
+        print("3. Data Parsing Configuration")
+        print("-" * 30)
+        enable_parsing = input("Enable data parsing? (y/n) [y]: ").strip().lower()
+        enable_parsing = enable_parsing in ['y', 'yes', ''] or enable_parsing == ''
+        
+        patterns = []
+        if enable_parsing:
+            print("Configure parsing patterns:")
+            print("Available pattern types:")
+            print("  - numeric: Extract numbers (e.g., '123.45')")
+            print("  - status: Extract status messages (e.g., 'STATUS: READY')")
+            print("  - sensor: Extract sensor data (e.g., 'TEMP: 25.3')")
+            print("  - error: Extract error codes (e.g., 'ERROR 101: Connection failed')")
+            print("  - custom: Define your own pattern")
+            print()
+            
+            while True:
+                add_pattern = input("Add a parsing pattern? (y/n) [y]: ").strip().lower()
+                if add_pattern not in ['y', 'yes', '']:
+                    break
+                
+                print("\nPattern Configuration:")
+                name = input("Pattern name: ").strip()
+                if not name:
+                    continue
+                
+                description = input("Description: ").strip()
+                
+                print("Pattern types:")
+                print("1. Numeric data (extracts numbers)")
+                print("2. Status message (extracts status text)")
+                print("3. Sensor data (extracts sensor readings)")
+                print("4. Error codes (extracts error info)")
+                print("5. Custom pattern")
+                
+                pattern_type = input("Select pattern type (1-5) [1]: ").strip()
+                
+                if pattern_type == '1':
+                    regex = "^(\\d+(?:\\.\\d+)?)\\r?\\n$"
+                    data_type = "float"
+                    extract_groups = [1]
+                    labels = []
+                elif pattern_type == '2':
+                    regex = "STATUS:\\s*(\\w+)"
+                    data_type = "string"
+                    extract_groups = [1]
+                    labels = []
+                elif pattern_type == '3':
+                    regex = "SENSOR\\s+(\\w+):\\s*(\\d+(?:\\.\\d+)?)"
+                    data_type = "sensor"
+                    extract_groups = [1, 2]
+                    labels = ["sensor_name", "value"]
+                elif pattern_type == '4':
+                    regex = "ERROR\\s+(\\d+):\\s*(.+)"
+                    data_type = "error"
+                    extract_groups = [1, 2]
+                    labels = ["error_code", "message"]
+                else:
+                    regex = input("Enter regex pattern: ").strip()
+                    data_type = input("Data type (string/float/int) [string]: ").strip() or "string"
+                    
+                    groups_input = input("Enter group numbers to extract (comma-separated, e.g., 1,2): ").strip()
+                    if groups_input:
+                        try:
+                            extract_groups = [int(x.strip()) for x in groups_input.split(',')]
+                        except ValueError:
+                            extract_groups = [1]
+                    else:
+                        extract_groups = [1]
+                    
+                    labels_input = input("Enter labels for groups (comma-separated, optional): ").strip()
+                    labels = [x.strip() for x in labels_input.split(',')] if labels_input else []
+                
+                pattern = {
+                    "name": name,
+                    "description": description,
+                    "regex": regex,
+                    "type": data_type,
+                    "extract_groups": extract_groups
+                }
+                
+                if labels:
+                    pattern["labels"] = labels
+                
+                patterns.append(pattern)
+                print(f"Added pattern: {name}")
+                print()
+        
+        print(f"Parsing settings: Enabled={enable_parsing}, Patterns={len(patterns)}")
+        print()
+        
+        # Data filtering configuration
+        print("4. Data Filtering Configuration")
+        print("-" * 30)
+        min_length = input("Minimum data length [1]: ").strip()
+        if not min_length:
+            min_length = 1
+        else:
+            try:
+                min_length = int(min_length)
+            except ValueError:
+                min_length = 1
+        
+        max_length = input("Maximum data length [1000]: ").strip()
+        if not max_length:
+            max_length = 1000
+        else:
+            try:
+                max_length = int(max_length)
+            except ValueError:
+                max_length = 1000
+        
+        print("Exclude patterns (regex patterns to skip):")
+        exclude_patterns = []
+        while True:
+            exclude = input("Add exclude pattern (or press Enter to finish): ").strip()
+            if not exclude:
+                break
+            exclude_patterns.append(exclude)
+        
+        print(f"Filtering settings: Min={min_length}, Max={max_length}, Exclude={len(exclude_patterns)}")
+        print()
+        
+        # Build configuration
+        config = {
             "serial": {
-                "port": "COM3",
-                "baud": 115200,
-                "timeout": 1.0,
+                "port": port,
+                "baud": baud,
+                "timeout": timeout,
                 "parity": "N",
                 "stopbits": 1,
                 "bytesize": 8
             },
             "logging": {
-                "log_directory": "./output/serial_logs",
+                "log_directory": log_dir,
                 "log_format": "timestamp,data",
                 "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
                 "auto_create_dirs": True,
-                "use_date_hierarchy": True,
-                "date_format": "%Y/%m_%b/%m_%d"
+                "use_date_hierarchy": use_hierarchy
             },
             "data_parsing": {
-                "enabled": True,
-                "patterns": [
-                    {
-                        "name": "numeric_data",
-                        "description": "Extract numeric values from serial data",
-                        "regex": "^(\\d+(?:\\.\\d+)?)\\r?\\n$",
-                        "type": "float",
-                        "extract_groups": [1]
-                    },
-                    {
-                        "name": "status_message",
-                        "description": "Extract status messages",
-                        "regex": "STATUS:\\s*(\\w+)",
-                        "type": "string",
-                        "extract_groups": [1]
-                    },
-                    {
-                        "name": "sensor_data",
-                        "description": "Extract sensor readings with labels",
-                        "regex": "SENSOR\\s+(\\w+):\\s*(\\d+(?:\\.\\d+)?)",
-                        "type": "sensor",
-                        "extract_groups": [1, 2],
-                        "labels": ["sensor_name", "value"]
-                    },
-                    {
-                        "name": "error_codes",
-                        "description": "Extract error codes",
-                        "regex": "ERROR\\s+(\\d+):\\s*(.+)",
-                        "type": "error",
-                        "extract_groups": [1, 2],
-                        "labels": ["error_code", "message"]
-                    }
-                ],
+                "enabled": enable_parsing,
+                "patterns": patterns,
                 "output_formats": ["json", "csv", "txt"],
                 "save_raw_data": True
             },
             "filters": {
-                "min_data_length": 1,
-                "max_data_length": 1000,
-                "exclude_patterns": ["^\\s*$", "^\\r?\\n$"],
+                "min_data_length": min_length,
+                "max_data_length": max_length,
+                "exclude_patterns": exclude_patterns,
                 "include_patterns": []
             }
         }
         
+        if use_hierarchy and custom_format:
+            config["logging"]["date_format"] = custom_format
+        
+        # Save configuration
         filename = "config/serial_logger_config.json"
         with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(sample_config, f, indent=2)
+            json.dump(config, f, indent=2)
         
-        print(f"✅ Serial logger configuration generated: {filename}")
-        print("Edit this file with your specific serial settings and parsing patterns.")
+        print("✅ Serial logger configuration generated successfully!")
+        print(f"Configuration saved to: {filename}")
+        print()
+        print("Configuration Summary:")
+        print(f"  Serial Port: {port} @ {baud} baud")
+        print(f"  Log Directory: {log_dir}")
+        print(f"  Date Hierarchy: {'Yes' if use_hierarchy else 'No'}")
+        print(f"  Data Parsing: {'Enabled' if enable_parsing else 'Disabled'}")
+        print(f"  Parsing Patterns: {len(patterns)}")
+        print(f"  Data Filters: {min_length}-{max_length} chars, {len(exclude_patterns)} exclusions")
         
     except Exception as e:
         print(f"❌ Error generating serial logger configuration: {e}")
