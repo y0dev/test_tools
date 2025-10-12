@@ -1027,7 +1027,9 @@ def generate_serial_logger_config():
                 "log_directory": "./output/serial_logs",
                 "log_format": "timestamp,data",
                 "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
-                "auto_create_dirs": True
+                "auto_create_dirs": True,
+                "use_date_hierarchy": True,
+                "date_format": "%Y/%m_%b/%m_%d"
             },
             "data_parsing": {
                 "enabled": True,

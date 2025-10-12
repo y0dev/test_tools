@@ -100,7 +100,15 @@ class SerialLogger:
         """
         try:
             logging_config = self.config['logging']
-            log_dir = Path(logging_config['log_directory'])
+            base_log_dir = Path(logging_config['log_directory'])
+            
+            # Create date-based hierarchy if enabled
+            if logging_config.get('use_date_hierarchy', False):
+                date_format = logging_config.get('date_format', '%Y/%m_%b/%m_%d')
+                date_path = datetime.now().strftime(date_format)
+                log_dir = base_log_dir / date_path
+            else:
+                log_dir = base_log_dir
             
             # Create directory if needed
             if logging_config.get('auto_create_dirs', True):
@@ -487,7 +495,9 @@ def create_sample_serial_logger_config() -> Dict[str, Any]:
             "log_directory": "./output/serial_logs",
             "log_format": "timestamp,data",
             "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
-            "auto_create_dirs": True
+            "auto_create_dirs": True,
+            "use_date_hierarchy": True,
+            "date_format": "%Y/%m_%b/%m_%d"
         },
         "data_parsing": {
             "enabled": True,
