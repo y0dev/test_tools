@@ -16,55 +16,8 @@
     "date_format": "%Y/%m_%b/%m_%d"
   },
   "data_parsing": {
-    "enabled": true,
-    "patterns": [
-      {
-        "name": "numeric_data",
-        "description": "Extract numeric values from serial data",
-        "regex": "^(\\d+(?:\\.\\d+)?)\\r?\\n$",
-        "type": "float",
-        "extract_groups": [
-          1
-        ]
-      },
-      {
-        "name": "status_message",
-        "description": "Extract status messages",
-        "regex": "STATUS:\\s*(\\w+)",
-        "type": "string",
-        "extract_groups": [
-          1
-        ]
-      },
-      {
-        "name": "sensor_data",
-        "description": "Extract sensor readings with labels",
-        "regex": "SENSOR\\s+(\\w+):\\s*(\\d+(?:\\.\\d+)?)",
-        "type": "sensor",
-        "extract_groups": [
-          1,
-          2
-        ],
-        "labels": [
-          "sensor_name",
-          "value"
-        ]
-      },
-      {
-        "name": "error_codes",
-        "description": "Extract error codes",
-        "regex": "ERROR\\s+(\\d+):\\s*(.+)",
-        "type": "error",
-        "extract_groups": [
-          1,
-          2
-        ],
-        "labels": [
-          "error_code",
-          "message"
-        ]
-      }
-    ],
+    "enabled": false,
+    "patterns": [],
     "output_formats": [
       "json",
       "csv",
@@ -75,10 +28,7 @@
   "filters": {
     "min_data_length": 1,
     "max_data_length": 1000,
-    "exclude_patterns": [
-      "^\\s*$",
-      "^\\r?\\n$"
-    ],
+    "exclude_patterns": [],
     "include_patterns": []
   }
 }

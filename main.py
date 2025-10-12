@@ -838,12 +838,14 @@ def serial_logger_menu():
         print("1. Start Serial Logger")
         print("2. Parse Serial Data")
         print("3. Generate Serial Logger Config")
-        print("4. List Data Parsing Patterns")
-        print("5. Back to Main Menu")
+        print("4. List Serial Logger Configs")
+        print("5. Select Default Config")
+        print("6. List Data Parsing Patterns")
+        print("7. Back to Main Menu")
         print()
         
         try:
-            choice = input("Select an option (1-5): ").strip()
+            choice = input("Select an option (1-7): ").strip()
             
             if choice == '1':
                 start_serial_logger()
@@ -852,11 +854,15 @@ def serial_logger_menu():
             elif choice == '3':
                 generate_serial_logger_config()
             elif choice == '4':
-                list_data_parsing_patterns()
+                list_serial_logger_configs()
             elif choice == '5':
+                select_default_config()
+            elif choice == '6':
+                list_data_parsing_patterns()
+            elif choice == '7':
                 break
             else:
-                print("❌ Invalid choice. Please select 1-5.")
+                print("❌ Invalid choice. Please select 1-7.")
                 
         except KeyboardInterrupt:
             break
@@ -869,15 +875,45 @@ def start_serial_logger():
     try:
         from libs.serial_logger import SerialLogger
         
-        # Get configuration file
-        config_file = input("Enter serial logger config file path (or press Enter for default): ").strip()
-        if not config_file:
-            config_file = "config/serial_logger_config.json"
+        # Get available configurations
+        config_files = get_serial_logger_configs()
+        if not config_files:
+            print("❌ No serial logger configurations found.")
+            print("Use option 3 to generate a configuration file.")
+            return
+        
+        # Show available configurations
+        print("Available Serial Logger Configurations:")
+        print("-" * 40)
+        for i, config_file in enumerate(config_files):
+            config_name = get_config_display_name(config_file)
+            print(f"  {i+1}. {config_name}")
+        
+        print(f"  {len(config_files)+1}. Enter custom path")
+        print()
+        
+        # Get user selection
+        choice = input(f"Select configuration (1-{len(config_files)+1}): ").strip()
+        
+        try:
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(config_files):
+                config_file = config_files[choice_num - 1]
+            elif choice_num == len(config_files) + 1:
+                config_file = input("Enter configuration file path: ").strip()
+                if not config_file:
+                    print("❌ No configuration file specified")
+                    return
+            else:
+                print("❌ Invalid selection")
+                return
+        except ValueError:
+            print("❌ Invalid input")
+            return
         
         # Check if config file exists
         if not os.path.exists(config_file):
             print(f"❌ Configuration file not found: {config_file}")
-            print("Use option 3 to generate a sample configuration file.")
             return
         
         # Load configuration
@@ -932,10 +968,41 @@ def parse_serial_data():
             print(f"❌ Log file not found: {log_file}")
             return
         
-        # Get configuration file
-        config_file = input("Enter parsing config file path (or press Enter for default): ").strip()
-        if not config_file:
-            config_file = "config/serial_logger_config.json"
+        # Get available configurations
+        config_files = get_serial_logger_configs()
+        if not config_files:
+            print("❌ No serial logger configurations found.")
+            print("Use option 3 to generate a configuration file.")
+            return
+        
+        # Show available configurations
+        print("Select parsing configuration:")
+        print("-" * 30)
+        for i, config_file in enumerate(config_files):
+            config_name = get_config_display_name(config_file)
+            print(f"  {i+1}. {config_name}")
+        
+        print(f"  {len(config_files)+1}. Enter custom path")
+        print()
+        
+        # Get user selection
+        choice = input(f"Select configuration (1-{len(config_files)+1}): ").strip()
+        
+        try:
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(config_files):
+                config_file = config_files[choice_num - 1]
+            elif choice_num == len(config_files) + 1:
+                config_file = input("Enter configuration file path: ").strip()
+                if not config_file:
+                    print("❌ No configuration file specified")
+                    return
+            else:
+                print("❌ Invalid selection")
+                return
+        except ValueError:
+            print("❌ Invalid input")
+            return
         
         if not os.path.exists(config_file):
             print(f"❌ Configuration file not found: {config_file}")
@@ -946,6 +1013,7 @@ def parse_serial_data():
             config = json.load(f)
         
         print(f"Parsing data from: {log_file}")
+        print(f"Using configuration: {get_config_display_name(config_file)}")
         print("Using parsing patterns from configuration...")
         
         # Create parser and parse data
@@ -1010,12 +1078,176 @@ def parse_serial_data_from_file(log_file):
         print(f"❌ Error parsing serial data: {e}")
 
 
+def get_serial_logger_configs():
+    """Get list of available serial logger configuration files."""
+    config_dir = Path("config")
+    config_files = []
+    
+    # Look for serial logger config files
+    patterns = [
+        "serial_logger_config*.json",
+        "*_serial_logger.json",
+        "serial_*.json"
+    ]
+    
+    for pattern in patterns:
+        config_files.extend(config_dir.glob(pattern))
+    
+    # Remove duplicates and sort
+    config_files = sorted(list(set(config_files)))
+    
+    # Convert to strings
+    return [str(f) for f in config_files]
+
+
+def get_config_display_name(config_file):
+    """Get a user-friendly display name for a configuration file."""
+    try:
+        # Try to load config and get name from metadata
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        # Check for custom name in config
+        if 'metadata' in config and 'name' in config['metadata']:
+            return config['metadata']['name']
+        
+        # Check for description
+        if 'metadata' in config and 'description' in config['metadata']:
+            return config['metadata']['description']
+        
+        # Use port and baud rate as identifier
+        if 'serial' in config:
+            port = config['serial'].get('port', 'Unknown')
+            baud = config['serial'].get('baud', 'Unknown')
+            return f"{port} @ {baud} baud"
+        
+    except Exception:
+        pass
+    
+    # Fallback to filename
+    return Path(config_file).stem
+
+
+def list_serial_logger_configs():
+    """List available serial logger configurations."""
+    try:
+        config_files = get_serial_logger_configs()
+        
+        if not config_files:
+            print("No serial logger configurations found.")
+            print("Use option 3 to generate a configuration file.")
+            return
+        
+        print("Available Serial Logger Configurations:")
+        print("=" * 50)
+        
+        for i, config_file in enumerate(config_files):
+            config_name = get_config_display_name(config_file)
+            print(f"\n{i+1}. {config_name}")
+            print(f"   File: {config_file}")
+            
+            # Load and display config details
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                
+                if 'serial' in config:
+                    port = config['serial'].get('port', 'Unknown')
+                    baud = config['serial'].get('baud', 'Unknown')
+                    print(f"   Serial: {port} @ {baud} baud")
+                
+                if 'logging' in config:
+                    log_dir = config['logging'].get('log_directory', 'Unknown')
+                    hierarchy = config['logging'].get('use_date_hierarchy', False)
+                    print(f"   Logging: {log_dir} (hierarchy: {'Yes' if hierarchy else 'No'})")
+                
+                if 'data_parsing' in config:
+                    enabled = config['data_parsing'].get('enabled', False)
+                    patterns = len(config['data_parsing'].get('patterns', []))
+                    print(f"   Parsing: {'Enabled' if enabled else 'Disabled'} ({patterns} patterns)")
+                
+            except Exception as e:
+                print(f"   Error reading config: {e}")
+        
+        print(f"\nTotal configurations: {len(config_files)}")
+        
+    except Exception as e:
+        print(f"❌ Error listing configurations: {e}")
+
+
+def select_default_config():
+    """Set a default serial logger configuration."""
+    try:
+        config_files = get_serial_logger_configs()
+        
+        if not config_files:
+            print("No serial logger configurations found.")
+            print("Use option 3 to generate a configuration file.")
+            return
+        
+        print("Select Default Serial Logger Configuration:")
+        print("-" * 40)
+        for i, config_file in enumerate(config_files):
+            config_name = get_config_display_name(config_file)
+            print(f"  {i+1}. {config_name}")
+        
+        choice = input(f"Select default configuration (1-{len(config_files)}): ").strip()
+        
+        try:
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(config_files):
+                selected_config = config_files[choice_num - 1]
+                
+                # Create or update default config link
+                default_config_path = "config/serial_logger_config.json"
+                
+                # If the selected config is not the default, copy it
+                if selected_config != default_config_path:
+                    import shutil
+                    shutil.copy2(selected_config, default_config_path)
+                    print(f"✅ Default configuration set to: {get_config_display_name(selected_config)}")
+                else:
+                    print("✅ This configuration is already the default")
+                
+            else:
+                print("❌ Invalid selection")
+                
+        except ValueError:
+            print("❌ Invalid input")
+        
+    except Exception as e:
+        print(f"❌ Error setting default configuration: {e}")
+
+
 def generate_serial_logger_config():
     """Generate serial logger configuration with interactive wizard."""
     try:
         print("Serial Logger Configuration Wizard")
         print("=" * 50)
         print("This wizard will help you create a customized serial logger configuration.")
+        print()
+        
+        # Configuration metadata
+        print("0. Configuration Metadata")
+        print("-" * 30)
+        config_name = input("Enter configuration name (e.g., 'Arduino Uno', 'ESP32 Dev Board'): ").strip()
+        if not config_name:
+            config_name = "Serial Logger Config"
+        
+        config_description = input("Enter description (optional): ").strip()
+        
+        # Ask for custom filename
+        custom_filename = input("Enter custom filename (or press Enter for auto-generated): ").strip()
+        if not custom_filename:
+            # Generate filename from name
+            safe_name = "".join(c for c in config_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_name = safe_name.replace(' ', '_').lower()
+            custom_filename = f"serial_logger_{safe_name}.json"
+        
+        if not custom_filename.endswith('.json'):
+            custom_filename += '.json'
+        
+        print(f"Configuration will be saved as: config/{custom_filename}")
         print()
         
         # Serial port configuration
@@ -1193,6 +1425,12 @@ def generate_serial_logger_config():
         
         # Build configuration
         config = {
+            "metadata": {
+                "name": config_name,
+                "description": config_description,
+                "created": datetime.now().isoformat(),
+                "version": "1.0"
+            },
             "serial": {
                 "port": port,
                 "baud": baud,
@@ -1226,7 +1464,7 @@ def generate_serial_logger_config():
             config["logging"]["date_format"] = custom_format
         
         # Save configuration
-        filename = "config/serial_logger_config.json"
+        filename = f"config/{custom_filename}"
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=2)
         
