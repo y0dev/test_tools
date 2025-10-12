@@ -1,0 +1,75 @@
+Power Supply Test Analysis Report
+==================================================
+Generated: 2025-10-12 01:52:37
+
+Connection Analysis:
+--------------------
+  01:21:32: Connected to COM3 at 9600 baud
+
+Instrument Information:
+--------------------
+  01:21:33: Keysight Technologies,E3632A,MY12345678,1.0.0
+
+Voltage Analysis:
+--------------------
+Voltage Settings: 2
+Voltage Measurements: 1
+
+Voltage Settings:
+  01:21:34: 3.30V
+  01:21:59: 5.00V
+
+Voltage Measurements:
+  01:21:37: 3.28V
+
+Current Analysis:
+--------------------
+Current Settings: 2
+  01:21:35: 0.50A
+  01:21:60: 0.30A
+
+Power Cycle Analysis:
+--------------------
+Cycle Starts: 3
+Cycle Completions: 3
+
+Cycle Details:
+  01:21:44: Cycle 1/3 completed in 8.50s
+  01:21:51: Cycle 2/3 completed in 8.45s
+  01:21:58: Cycle 3/3 completed in 8.52s
+
+Voltage Ramp Analysis:
+--------------------
+Ramp Cycle Starts: 2
+Ramp Cycle Completions: 2
+Voltage Steps: 22
+
+Ramp Cycle Details:
+  01:21:68: Ramp Cycle 1/2 completed in 12.30s
+  01:21:76: Ramp Cycle 2/2 completed in 12.25s
+
+Voltage Steps:
+  01:21:39: Step 0 - Set: 0.00V, Measured: 0.00V
+  01:21:40: Step 1 - Set: 1.10V, Measured: 1.09V
+  01:21:41: Step 2 - Set: 2.20V, Measured: 2.18V
+  01:21:42: Step 3 - Set: 3.30V, Measured: 3.28V
+  01:21:46: Step 0 - Set: 0.00V, Measured: 0.00V
+  01:21:47: Step 1 - Set: 1.10V, Measured: 1.11V
+  01:21:48: Step 2 - Set: 2.20V, Measured: 2.19V
+  01:21:49: Step 3 - Set: 3.30V, Measured: 3.29V
+  01:21:53: Step 0 - Set: 0.00V, Measured: 0.00V
+  01:21:54: Step 1 - Set: 1.10V, Measured: 1.10V
+
+Output Control Analysis:
+--------------------
+Output ON Events: 1
+Output OFF Events: 5
+
+Summary:
+----------
+Total parsed entries: 47
+Unique patterns matched: 14
+Power cycles completed: 3
+Ramp cycles completed: 2
+Voltage steps executed: 22
+Output control events: 6

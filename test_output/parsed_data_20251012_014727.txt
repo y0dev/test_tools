@@ -1,0 +1,96 @@
+Serial Logger Parsing Results
+==================================================
+Generated: 2025-10-12 01:47:27
+Total Entries: 23
+Patterns Used: 11
+
+Pattern: uint8_array
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:32] UINT8_ARRAY: 0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A
+     Extracted: {'timestamp': '01:21:32', 'uint8_data': '0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A'}
+  2. [2025-10-12T01:47:27.027751] [01:21:55] UINT8_ARRAY: 0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A
+     Extracted: {'timestamp': '01:21:55', 'uint8_data': '0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A'}
+
+Pattern: uint32_array
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:32] UINT32_ARRAY: 0x01020304 0x05060708 0x090A0B0C 0x0D0E0F10 0x11121314 0x15161718 0x191A1B1C 0x1D1E1F20 0x21222324 0x25262728
+     Extracted: {'timestamp': '01:21:32', 'uint32_data': '0x01020304 0x05060708 0x090A0B0C 0x0D0E0F10 0x11121314 0x15161718 0x191A1B1C 0x1D1E1F20 0x21222324 0x25262728'}
+  2. [2025-10-12T01:47:27.027751] [01:21:55] UINT32_ARRAY: 0x01020304 0x05060708 0x090A0B0C 0x0D0E0F10 0x11121314 0x15161718 0x191A1B1C 0x1D1E1F20 0x21222324 0x25262728
+     Extracted: {'timestamp': '01:21:55', 'uint32_data': '0x01020304 0x05060708 0x090A0B0C 0x0D0E0F10 0x11121314 0x15161718 0x191A1B1C 0x1D1E1F20 0x21222324 0x25262728'}
+
+Pattern: array_test_end
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:32] ARRAY_TEST_END
+     Extracted: {'timestamp': '01:21:32', 'event': 'ARRAY_TEST_END'}
+  2. [2025-10-12T01:47:27.027751] [01:21:55] ARRAY_TEST_END
+     Extracted: {'timestamp': '01:21:55', 'event': 'ARRAY_TEST_END'}
+
+Pattern: test_mode
+------------------------------
+Count: 4
+  1. [2025-10-12T01:47:27.026754] [01:21:37] Test mode: DISABLED
+     Extracted: {'timestamp': '01:21:37', 'mode': 'DISABLED'}
+  2. [2025-10-12T01:47:27.026754] [01:21:48] Test mode: ENABLED
+     Extracted: {'timestamp': '01:21:48', 'mode': 'ENABLED'}
+  3. [2025-10-12T01:47:27.027751] [01:22:01] Test mode: DISABLED
+     Extracted: {'timestamp': '01:22:01', 'mode': 'DISABLED'}
+  4. [2025-10-12T01:47:27.027751] [01:22:12] Test mode: ENABLED
+     Extracted: {'timestamp': '01:22:12', 'mode': 'ENABLED'}
+
+Pattern: system_idle
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:38] System idle - Press button to enable tests
+     Extracted: {'timestamp': '01:21:38', 'message': 'System idle - Press button to enable tests'}
+  2. [2025-10-12T01:47:27.027751] [01:22:02] System idle - Press button to enable tests
+     Extracted: {'timestamp': '01:22:02', 'message': 'System idle - Press button to enable tests'}
+
+Pattern: test_start
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:49] TEST_START
+     Extracted: {'timestamp': '01:21:49', 'event': 'TEST_START'}
+  2. [2025-10-12T01:47:27.027751] [01:22:13] TEST_START
+     Extracted: {'timestamp': '01:22:13', 'event': 'TEST_START'}
+
+Pattern: test_data
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:50] DATA: 0x12345678, 0xDEADBEEF, CRC=0xA5A5A5A5
+     Extracted: {'timestamp': '01:21:50', 'data1': '0x12345678', 'data2': '0xDEADBEEF', 'crc': '0xA5A5A5A5'}
+  2. [2025-10-12T01:47:27.027751] [01:22:13] DATA: 0x12345678, 0xDEADBEEF, CRC=0xA5A5A5A5
+     Extracted: {'timestamp': '01:22:13', 'data1': '0x12345678', 'data2': '0xDEADBEEF', 'crc': '0xA5A5A5A5'}
+
+Pattern: test_info
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:50] INFO: Test OK, Voltage=3.30V, Temp=27C
+     Extracted: {'timestamp': '01:21:50', 'voltage': '3.30', 'temperature': '27'}
+  2. [2025-10-12T01:47:27.027751] [01:22:13] INFO: Test OK, Voltage=3.30V, Temp=27C
+     Extracted: {'timestamp': '01:22:13', 'voltage': '3.30', 'temperature': '27'}
+
+Pattern: test_pass
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:50] TEST_PASS
+     Extracted: {'timestamp': '01:21:50', 'result': 'TEST_PASS'}
+  2. [2025-10-12T01:47:27.027751] [01:22:13] TEST_PASS
+     Extracted: {'timestamp': '01:22:13', 'result': 'TEST_PASS'}
+
+Pattern: test_end
+------------------------------
+Count: 2
+  1. [2025-10-12T01:47:27.026754] [01:21:50] TEST_END
+     Extracted: {'timestamp': '01:21:50', 'event': 'TEST_END'}
+  2. [2025-10-12T01:47:27.027751] [01:22:13] TEST_END
+     Extracted: {'timestamp': '01:22:13', 'event': 'TEST_END'}
+
+Pattern: array_test_start
+------------------------------
+Count: 1
+  1. [2025-10-12T01:47:27.026754] [01:21:55] ARRAY_TEST_START
+     Extracted: {'timestamp': '01:21:55', 'event': 'ARRAY_TEST_START'}
+

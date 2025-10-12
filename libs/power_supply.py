@@ -109,6 +109,7 @@ class KeysightE3632A_RS232:
         :param voltage: Voltage level to set (in volts).
         """
         self.logger.info(f"Setting voltage to {voltage} V")
+        self._log_structured("voltage_set", voltage=voltage)
         self.send_command(f"VOLT {voltage}")
         print(f"Voltage set to {voltage} V")
 
@@ -137,6 +138,7 @@ class KeysightE3632A_RS232:
         voltage = self.read_response()
         voltage_float = float(voltage)
         self.logger.info(f"Measured voltage: {voltage_float} V")
+        self._log_structured("voltage_measured", voltage=voltage_float)
         print(f"Measured Voltage: {voltage} V")
         return voltage_float
 
@@ -147,6 +149,7 @@ class KeysightE3632A_RS232:
         :param current: Current limit to set (in amps).
         """
         self.logger.info(f"Setting current limit to {current} A")
+        self._log_structured("current_set", current=current)
         self.send_command(f"CURR {current}")
         print(f"Current limit set to {current} A")
 
@@ -155,6 +158,7 @@ class KeysightE3632A_RS232:
         Turn the output ON.
         """
         self.logger.info("Turning output ON")
+        self._log_structured("output_on")
         self.send_command("OUTP ON")
         print("Output turned ON")
 
@@ -163,6 +167,7 @@ class KeysightE3632A_RS232:
         Turn the output OFF.
         """
         self.logger.info("Turning output OFF")
+        self._log_structured("output_off")
         self.send_command("OUTP OFF")
         print("Output turned OFF")
 
@@ -264,6 +269,22 @@ class KeysightE3632A_RS232:
             self.logger.error(f"Reconnection failed: {e}")
             print(f"Reconnection failed: {e}")
             raise ConnectionError(f"Failed to reconnect: {e}")
+
+    def _log_structured(self, event_type, **kwargs):
+        """
+        Log structured data for parsing.
+        
+        :param event_type: Type of event (voltage_set, voltage_measured, etc.)
+        :param kwargs: Additional data to log
+        """
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        log_entry = f"[{timestamp}] {event_type}"
+        
+        for key, value in kwargs.items():
+            log_entry += f" {key}={value}"
+        
+        self.logger.info(log_entry)
+        print(log_entry)
 
     def _show_progress(self, duration, label=""):
         """
