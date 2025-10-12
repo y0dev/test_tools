@@ -1,0 +1,85 @@
+{
+  "metadata": {
+    "name": "Sample Automated Serial Setup",
+    "description": "Example configuration for automated serial communication",
+    "created": "2025-10-12T02:01:25.744441",
+    "version": "1.0"
+  },
+  "serial": {
+    "port": "COM3",
+    "baud": 115200,
+    "timeout": 1.0,
+    "parity": "N",
+    "stopbits": 1,
+    "bytesize": 8
+  },
+  "automation": {
+    "enabled": true,
+    "max_retries": 3,
+    "step_timeout": 5.0,
+    "wait_between_steps": 0.5,
+    "log_all_interactions": true
+  },
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "Connect and Wait",
+      "description": "Wait for device to be ready",
+      "type": "wait_for_prompt",
+      "prompt_pattern": ">",
+      "timeout": 10.0,
+      "on_success": "step_2",
+      "on_failure": "error_handler"
+    },
+    {
+      "id": "step_2",
+      "name": "Get Status",
+      "description": "Get device status",
+      "type": "send_command",
+      "command": "status",
+      "wait_for_response": true,
+      "response_pattern": "Status:",
+      "timeout": 5.0,
+      "on_success": "step_3",
+      "on_failure": "error_handler"
+    },
+    {
+      "id": "step_3",
+      "name": "Configure Device",
+      "description": "Enter configuration mode",
+      "type": "send_command",
+      "command": "config",
+      "wait_for_response": true,
+      "response_pattern": "Config:",
+      "timeout": 5.0,
+      "on_success": "completion",
+      "on_failure": "error_handler"
+    },
+    {
+      "id": "completion",
+      "name": "Setup Complete",
+      "description": "Automated setup completed",
+      "type": "completion",
+      "message": "Automated serial setup completed successfully!"
+    },
+    {
+      "id": "error_handler",
+      "name": "Error Handler",
+      "description": "Handle errors",
+      "type": "error_handler",
+      "retry_steps": [
+        "step_1"
+      ],
+      "max_retries": 2,
+      "fallback_action": "stop"
+    }
+  ],
+  "logging": {
+    "log_directory": "./output/automated_serial_logs",
+    "log_format": "timestamp,step,action,data",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+    "auto_create_dirs": true,
+    "use_date_hierarchy": true,
+    "date_format": "%Y/%m_%b/%m_%d"
+  }
+}

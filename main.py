@@ -482,12 +482,13 @@ def show_main_menu():
         print("4. JTAG Operations")
         print("5. STM32 Operations")
         print("6. Serial Logger")
-        print("7. Help & Documentation")
-        print("8. Exit")
+        print("7. Automated Serial Setup")
+        print("8. Help & Documentation")
+        print("9. Exit")
         print()
         
         try:
-            choice = input("Select an option (1-8): ").strip()
+            choice = input("Select an option (1-9): ").strip()
             
             if choice == '1':
                 run_tests_menu()
@@ -502,12 +503,14 @@ def show_main_menu():
             elif choice == '6':
                 serial_logger_menu()
             elif choice == '7':
-                help_menu()
+                automated_serial_setup_menu()
             elif choice == '8':
+                help_menu()
+            elif choice == '9':
                 print("Goodbye!")
                 break
             else:
-                print("❌ Invalid choice. Please select 1-8.")
+                print("❌ Invalid choice. Please select 1-9.")
                 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
@@ -841,6 +844,410 @@ def list_stm32_templates():
     except Exception as e:
         print(f"❌ Error listing STM32 templates: {e}")
 
+
+def automated_serial_setup_menu():
+    """Display automated serial setup menu."""
+    while True:
+        print("\n" + "="*50)
+        print("Automated Serial Setup")
+        print("="*50)
+        print("1. Run Automated Setup")
+        print("2. Create New Configuration")
+        print("3. List Available Configurations")
+        print("4. Test Configuration")
+        print("5. Monitor Automation Status")
+        print("6. Parse Automation Logs")
+        print("7. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-7): ").strip()
+            
+            if choice == '1':
+                run_automated_serial_setup()
+            elif choice == '2':
+                create_automated_serial_config()
+            elif choice == '3':
+                list_automated_serial_configs()
+            elif choice == '4':
+                test_automated_serial_config()
+            elif choice == '5':
+                monitor_automation_status()
+            elif choice == '6':
+                parse_automation_logs()
+            elif choice == '7':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-7.")
+                
+        except KeyboardInterrupt:
+            print("\n\nReturning to main menu...")
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+def run_automated_serial_setup():
+    """Run automated serial setup."""
+    try:
+        print("\n=== Automated Serial Setup ===")
+        
+        # List available configurations
+        config_files = get_automated_serial_configs()
+        if not config_files:
+            print("❌ No automated serial configurations found.")
+            print("Use option 2 to create a new configuration.")
+            return
+        
+        print("Available Automated Serial Configurations:")
+        print("-" * 40)
+        for i, config_file in enumerate(config_files):
+            config_name = get_automated_config_display_name(config_file)
+            print(f"  {i+1}. {config_name}")
+        
+        print(f"  {len(config_files)+1}. Enter custom path")
+        print()
+        
+        # Get user selection
+        choice = input(f"Select configuration (1-{len(config_files)+1}): ").strip()
+        
+        try:
+            choice_num = int(choice)
+            if 1 <= choice_num <= len(config_files):
+                config_file = config_files[choice_num - 1]
+            elif choice_num == len(config_files) + 1:
+                config_file = input("Enter configuration file path: ").strip()
+                if not config_file:
+                    print("❌ No configuration file specified")
+                    return
+            else:
+                print("❌ Invalid selection")
+                return
+        except ValueError:
+            print("❌ Invalid input")
+            return
+        
+        # Load configuration
+        if not os.path.exists(config_file):
+            print(f"❌ Configuration file not found: {config_file}")
+            return
+        
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        print(f"✅ Loaded configuration: {config['metadata']['name']}")
+        print(f"   Description: {config['metadata']['description']}")
+        print(f"   Steps: {len(config['steps'])}")
+        print(f"   Serial Port: {config['serial']['port']} @ {config['serial']['baud']} baud")
+        print()
+        
+        # Import and run automation
+        from libs.automated_serial_setup import AutomatedSerialSetup
+        
+        automation = AutomatedSerialSetup(config)
+        
+        # Set up callbacks
+        def on_step_complete(step_result):
+            status = "✅ Success" if step_result['success'] else "❌ Failed"
+            print(f"   Step {step_result['step_id']}: {step_result['step_name']} - {status}")
+            if step_result['retry_count'] > 0:
+                print(f"     (Retry #{step_result['retry_count']})")
+        
+        def on_completion(results):
+            print()
+            print("🎉 Automation completed successfully!")
+            print(f"   Completed {len(results)} steps")
+            print(f"   Log file: {automation.log_file_path}")
+        
+        def on_error(error_message):
+            print()
+            print(f"❌ Automation failed: {error_message}")
+            print(f"   Log file: {automation.log_file_path}")
+        
+        automation.set_callbacks(on_step_complete, on_completion, on_error)
+        
+        # Confirm before running
+        print("📋 Automation Steps:")
+        for i, step in enumerate(config['steps'], 1):
+            step_type = step.get('type', 'unknown')
+            step_name = step.get('name', 'Unknown')
+            print(f"   {i:2d}. {step['id']}: {step_name} ({step_type})")
+        print()
+        
+        confirm = input("Run automation? (y/n): ").strip().lower()
+        if confirm not in ['y', 'yes']:
+            print("Automation cancelled.")
+            return
+        
+        # Run automation
+        print("\n🚀 Starting automation...")
+        success = automation.run()
+        
+        if success:
+            print("✅ Automation completed successfully!")
+        else:
+            print("❌ Automation failed!")
+        
+        automation.disconnect()
+        
+    except Exception as e:
+        print(f"❌ Error running automated serial setup: {e}")
+
+def get_automated_serial_configs():
+    """Get list of automated serial configuration files."""
+    config_dir = Path("config")
+    if not config_dir.exists():
+        return []
+    
+    # Look for automated serial config files
+    patterns = [
+        "automated_serial_setup_config*.json",
+        "*_automated_serial*.json",
+        "automated_*.json"
+    ]
+    
+    config_files = []
+    for pattern in patterns:
+        config_files.extend(config_dir.glob(pattern))
+    
+    return sorted([str(f) for f in config_files])
+
+def get_automated_config_display_name(config_file):
+    """Get display name for automated serial config file."""
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        # Try metadata name first
+        if 'metadata' in config and 'name' in config['metadata']:
+            return config['metadata']['name']
+        
+        # Fallback to filename
+        return Path(config_file).stem
+        
+    except Exception:
+        return Path(config_file).stem
+
+def create_automated_serial_config():
+    """Create a new automated serial configuration."""
+    try:
+        print("\n=== Automated Serial Configuration Wizard ===")
+        print("This wizard will help you create an automated serial setup configuration.")
+        print()
+        
+        # Basic information
+        config_name = input("Enter configuration name: ").strip()
+        if not config_name:
+            config_name = "Automated Serial Setup"
+        
+        description = input("Enter description (optional): ").strip()
+        
+        # Serial settings
+        print("\n1. Serial Port Configuration")
+        print("-" * 30)
+        port = input("Enter serial port (e.g., COM3, COM1, /dev/ttyUSB0) [COM3]: ").strip()
+        if not port:
+            port = "COM3"
+        
+        baud = input("Enter baud rate [115200]: ").strip()
+        if not baud:
+            baud = 115200
+        else:
+            try:
+                baud = int(baud)
+            except ValueError:
+                baud = 115200
+        
+        # Automation settings
+        print("\n2. Automation Settings")
+        print("-" * 30)
+        max_retries = input("Maximum retries per step [3]: ").strip()
+        if not max_retries:
+            max_retries = 3
+        else:
+            try:
+                max_retries = int(max_retries)
+            except ValueError:
+                max_retries = 3
+        
+        step_timeout = input("Step timeout in seconds [5.0]: ").strip()
+        if not step_timeout:
+            step_timeout = 5.0
+        else:
+            try:
+                step_timeout = float(step_timeout)
+            except ValueError:
+                step_timeout = 5.0
+        
+        # Create basic steps
+        print("\n3. Creating Basic Steps")
+        print("-" * 30)
+        
+        steps = [
+            {
+                "id": "step_1",
+                "name": "Initial Connection",
+                "description": "Wait for device prompt",
+                "type": "wait_for_prompt",
+                "prompt_pattern": ">",
+                "timeout": 10.0,
+                "on_success": "step_2",
+                "on_failure": "error_handler"
+            },
+            {
+                "id": "step_2",
+                "name": "Get Status",
+                "description": "Get device status",
+                "type": "send_command",
+                "command": "status",
+                "wait_for_response": True,
+                "response_pattern": "Status:",
+                "timeout": step_timeout,
+                "on_success": "completion",
+                "on_failure": "error_handler"
+            },
+            {
+                "id": "completion",
+                "name": "Setup Complete",
+                "description": "Automation completed",
+                "type": "completion",
+                "message": "Automated serial setup completed successfully!"
+            },
+            {
+                "id": "error_handler",
+                "name": "Error Handler",
+                "description": "Handle errors",
+                "type": "error_handler",
+                "retry_steps": ["step_1"],
+                "max_retries": max_retries,
+                "fallback_action": "stop"
+            }
+        ]
+        
+        # Build configuration
+        config = {
+            "metadata": {
+                "name": config_name,
+                "description": description,
+                "created": datetime.now().isoformat(),
+                "version": "1.0"
+            },
+            "serial": {
+                "port": port,
+                "baud": baud,
+                "timeout": 1.0,
+                "parity": "N",
+                "stopbits": 1,
+                "bytesize": 8
+            },
+            "automation": {
+                "enabled": True,
+                "max_retries": max_retries,
+                "step_timeout": step_timeout,
+                "wait_between_steps": 0.5,
+                "log_all_interactions": True
+            },
+            "steps": steps,
+            "logging": {
+                "log_directory": "./output/automated_serial_logs",
+                "log_format": "timestamp,step,action,data",
+                "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+                "auto_create_dirs": True,
+                "use_date_hierarchy": True,
+                "date_format": "%Y/%m_%b/%m_%d"
+            }
+        }
+        
+        # Save configuration
+        filename = f"config/automated_serial_{config_name.lower().replace(' ', '_')}.json"
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        
+        print("✅ Automated serial configuration created successfully!")
+        print(f"Configuration saved to: {filename}")
+        print()
+        print("Configuration Summary:")
+        print(f"  Name: {config_name}")
+        print(f"  Serial Port: {port} @ {baud} baud")
+        print(f"  Steps: {len(steps)}")
+        print(f"  Max Retries: {max_retries}")
+        print(f"  Step Timeout: {step_timeout}s")
+        
+    except Exception as e:
+        print(f"❌ Error creating automated serial configuration: {e}")
+
+def list_automated_serial_configs():
+    """List available automated serial configurations."""
+    try:
+        config_files = get_automated_serial_configs()
+        
+        if not config_files:
+            print("❌ No automated serial configurations found.")
+            print("Use option 2 to create a new configuration.")
+            return
+        
+        print("Available Automated Serial Configurations:")
+        print("=" * 50)
+        
+        for i, config_file in enumerate(config_files):
+            config_name = get_automated_config_display_name(config_file)
+            print(f"\n{i+1}. {config_name}")
+            print(f"   File: {config_file}")
+            
+            # Load and display config details
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                
+                if 'serial' in config:
+                    port = config['serial'].get('port', 'Unknown')
+                    baud = config['serial'].get('baud', 'Unknown')
+                    print(f"   Serial: {port} @ {baud} baud")
+                
+                if 'steps' in config:
+                    print(f"   Steps: {len(config['steps'])}")
+                
+                if 'automation' in config:
+                    max_retries = config['automation'].get('max_retries', 'Unknown')
+                    timeout = config['automation'].get('step_timeout', 'Unknown')
+                    print(f"   Max Retries: {max_retries}, Timeout: {timeout}s")
+                
+            except Exception as e:
+                print(f"   Error loading config: {e}")
+        
+    except Exception as e:
+        print(f"❌ Error listing configurations: {e}")
+
+def test_automated_serial_config():
+    """Test automated serial configuration."""
+    try:
+        print("\n=== Test Automated Serial Configuration ===")
+        
+        # Run the test script
+        import subprocess
+        result = subprocess.run([sys.executable, "test_automated_serial_setup.py"], 
+                              capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print("✅ Configuration test passed!")
+            print(result.stdout)
+        else:
+            print("❌ Configuration test failed!")
+            print(result.stderr)
+        
+    except Exception as e:
+        print(f"❌ Error testing configuration: {e}")
+
+def monitor_automation_status():
+    """Monitor automation status (placeholder)."""
+    print("\n=== Monitor Automation Status ===")
+    print("This feature will be implemented in a future version.")
+    print("For now, check the log files in ./output/automated_serial_logs/")
+
+def parse_automation_logs():
+    """Parse automation logs (placeholder)."""
+    print("\n=== Parse Automation Logs ===")
+    print("This feature will be implemented in a future version.")
+    print("For now, check the log files in ./output/automated_serial_logs/")
 
 def serial_logger_menu():
     """Menu for serial logger operations."""

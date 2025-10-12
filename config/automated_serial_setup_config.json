@@ -1,0 +1,273 @@
+{
+  "metadata": {
+    "name": "Automated Serial Setup",
+    "description": "Configuration for automated serial communication with menu-driven steps",
+    "created": "2025-10-12T16:00:00.000000",
+    "version": "1.0"
+  },
+  "serial": {
+    "port": "COM3",
+    "baud": 115200,
+    "timeout": 1.0,
+    "parity": "N",
+    "stopbits": 1,
+    "bytesize": 8
+  },
+  "automation": {
+    "enabled": true,
+    "max_retries": 3,
+    "step_timeout": 5.0,
+    "wait_between_steps": 0.5,
+    "log_all_interactions": true
+  },
+  "steps": [
+    {
+      "id": "step_1",
+      "name": "Initial Connection",
+      "description": "Establish connection and wait for prompt",
+      "type": "wait_for_prompt",
+      "prompt_pattern": ">",
+      "timeout": 10.0,
+      "retry_count": 3,
+      "on_success": "step_2",
+      "on_failure": "error_handler",
+      "expected_response": "Command prompt ready"
+    },
+    {
+      "id": "step_2", 
+      "name": "System Information",
+      "description": "Get system information",
+      "type": "send_command",
+      "command": "info",
+      "wait_for_response": true,
+      "response_pattern": "System:",
+      "timeout": 5.0,
+      "on_success": "step_3",
+      "on_failure": "step_2_retry",
+      "expected_response": "System information displayed"
+    },
+    {
+      "id": "step_2_retry",
+      "name": "System Information Retry",
+      "description": "Retry getting system information",
+      "type": "send_command",
+      "command": "status",
+      "wait_for_response": true,
+      "response_pattern": "Status:",
+      "timeout": 5.0,
+      "on_success": "step_3",
+      "on_failure": "error_handler",
+      "expected_response": "Status information displayed"
+    },
+    {
+      "id": "step_3",
+      "name": "Configuration Menu",
+      "description": "Navigate to configuration menu",
+      "type": "send_command",
+      "command": "config",
+      "wait_for_response": true,
+      "response_pattern": "Config Menu:",
+      "timeout": 5.0,
+      "on_success": "step_4",
+      "on_failure": "error_handler",
+      "expected_response": "Configuration menu opened"
+    },
+    {
+      "id": "step_4",
+      "name": "Set Parameter 1",
+      "description": "Set first configuration parameter",
+      "type": "menu_interaction",
+      "menu_options": [
+        "1. Set Baud Rate",
+        "2. Set Data Format", 
+        "3. Set Timeout",
+        "4. Exit"
+      ],
+      "selection": "1",
+      "wait_for_response": true,
+      "response_pattern": "Baud Rate:",
+      "timeout": 5.0,
+      "on_success": "step_5",
+      "on_failure": "error_handler",
+      "expected_response": "Baud rate configuration opened"
+    },
+    {
+      "id": "step_5",
+      "name": "Enter Baud Rate",
+      "description": "Enter baud rate value",
+      "type": "send_input",
+      "input_value": "115200",
+      "wait_for_response": true,
+      "response_pattern": "Set to:",
+      "timeout": 5.0,
+      "on_success": "step_6",
+      "on_failure": "error_handler",
+      "expected_response": "Baud rate set to 115200"
+    },
+    {
+      "id": "step_6",
+      "name": "Return to Menu",
+      "description": "Return to main configuration menu",
+      "type": "send_command",
+      "command": "back",
+      "wait_for_response": true,
+      "response_pattern": "Config Menu:",
+      "timeout": 5.0,
+      "on_success": "step_7",
+      "on_failure": "error_handler",
+      "expected_response": "Returned to configuration menu"
+    },
+    {
+      "id": "step_7",
+      "name": "Set Parameter 2",
+      "description": "Set second configuration parameter",
+      "type": "menu_interaction",
+      "menu_options": [
+        "1. Set Baud Rate",
+        "2. Set Data Format",
+        "3. Set Timeout", 
+        "4. Exit"
+      ],
+      "selection": "2",
+      "wait_for_response": true,
+      "response_pattern": "Data Format:",
+      "timeout": 5.0,
+      "on_success": "step_8",
+      "on_failure": "error_handler",
+      "expected_response": "Data format configuration opened"
+    },
+    {
+      "id": "step_8",
+      "name": "Enter Data Format",
+      "description": "Enter data format value",
+      "type": "send_input",
+      "input_value": "8N1",
+      "wait_for_response": true,
+      "response_pattern": "Format set:",
+      "timeout": 5.0,
+      "on_success": "step_9",
+      "on_failure": "error_handler",
+      "expected_response": "Data format set to 8N1"
+    },
+    {
+      "id": "step_9",
+      "name": "Save Configuration",
+      "description": "Save all configuration changes",
+      "type": "send_command",
+      "command": "save",
+      "wait_for_response": true,
+      "response_pattern": "Configuration saved",
+      "timeout": 5.0,
+      "on_success": "step_10",
+      "on_failure": "error_handler",
+      "expected_response": "Configuration saved successfully"
+    },
+    {
+      "id": "step_10",
+      "name": "Exit Configuration",
+      "description": "Exit configuration menu",
+      "type": "menu_interaction",
+      "menu_options": [
+        "1. Set Baud Rate",
+        "2. Set Data Format",
+        "3. Set Timeout",
+        "4. Exit"
+      ],
+      "selection": "4",
+      "wait_for_response": true,
+      "response_pattern": ">",
+      "timeout": 5.0,
+      "on_success": "step_11",
+      "on_failure": "error_handler",
+      "expected_response": "Exited configuration menu"
+    },
+    {
+      "id": "step_11",
+      "name": "Final Verification",
+      "description": "Verify configuration was applied",
+      "type": "send_command",
+      "command": "show config",
+      "wait_for_response": true,
+      "response_pattern": "Current config:",
+      "timeout": 5.0,
+      "on_success": "completion",
+      "on_failure": "error_handler",
+      "expected_response": "Configuration verification complete"
+    },
+    {
+      "id": "completion",
+      "name": "Setup Complete",
+      "description": "Automated setup completed successfully",
+      "type": "completion",
+      "message": "Automated serial setup completed successfully!"
+    },
+    {
+      "id": "error_handler",
+      "name": "Error Handler",
+      "description": "Handle errors during setup",
+      "type": "error_handler",
+      "retry_steps": ["step_1", "step_2"],
+      "max_retries": 2,
+      "fallback_action": "manual_intervention"
+    }
+  ],
+  "logging": {
+    "log_directory": "./output/automated_serial_logs",
+    "log_format": "timestamp,step,action,data",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+    "auto_create_dirs": true,
+    "use_date_hierarchy": true,
+    "date_format": "%Y/%m_%b/%m_%d"
+  },
+  "data_parsing": {
+    "enabled": true,
+    "patterns": [
+      {
+        "name": "step_execution",
+        "description": "Track step execution",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Step\\s*(\\w+):\\s*(.+)$",
+        "type": "step",
+        "extract_groups": [1, 2, 3],
+        "labels": ["timestamp", "step_id", "message"]
+      },
+      {
+        "name": "command_sent",
+        "description": "Track commands sent",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Sending:\\s*(.+)$",
+        "type": "command",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "command"]
+      },
+      {
+        "name": "response_received",
+        "description": "Track responses received",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Received:\\s*(.+)$",
+        "type": "response",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "response"]
+      },
+      {
+        "name": "menu_displayed",
+        "description": "Track menu displays",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Menu:\\s*(.+)$",
+        "type": "menu",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "menu_content"]
+      },
+      {
+        "name": "error_occurred",
+        "description": "Track errors",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*ERROR:\\s*(.+)$",
+        "type": "error",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "error_message"]
+      }
+    ],
+    "output_formats": [
+      "json",
+      "csv", 
+      "txt"
+    ],
+    "save_raw_data": true
+  }
+}
