@@ -327,57 +327,57 @@ class KeysightE3632A_RS232:
                 }
                 
                 try:
-                # Turn output ON
-                self.output_on()
-                on_start = time.time()
-                
-                # Measure during ON time
-                if on_time > 0.1:  # Only measure if ON time is long enough
-                    time.sleep(0.1)  # Brief delay for stabilization
-                    voltage_measured = self.measure_voltage()
-                    cycle_result['measurements'].append({
-                        'time': time.time() - cycle_start_time,
-                        'voltage': voltage_measured,
-                        'state': 'ON'
-                    })
-                
-                # Wait for ON time with progress bar
-                if show_progress and on_time > 0.1:
-                    self._show_progress(on_time, f"Cycle {cycle_num}/{cycles} - Power ON | Power OFF in {on_time:.1f}s")
-                else:
-                    time.sleep(on_time)
-                
-                # Turn output OFF
-                self.output_off()
-                off_start = time.time()
-                
-                # Wait for OFF time with progress bar
-                if show_progress and off_time > 0.1:
-                    next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
-                    self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
-                else:
-                    time.sleep(off_time)
-                
-                cycle_end_time = time.time()
-                cycle_result['end_time'] = cycle_end_time
-                cycle_result['total_duration'] = cycle_end_time - cycle_start_time
-                
-                cycle_results.append(cycle_result)
-                self.logger.info(f"Cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
-                print(f"Cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
-                
-                # Call callback if provided
-                if callback:
-                    self.logger.debug(f"Calling callback for cycle {cycle_num}")
-                    callback(cycle_num, cycle_result)
+                    # Turn output ON
+                    self.output_on()
+                    on_start = time.time()
                     
-            except Exception as e:
-                self.logger.error(f"Error during cycle {cycle_num}: {e}")
-                print(f"Error during cycle {cycle_num}: {e}")
-                cycle_result['error'] = str(e)
-                cycle_results.append(cycle_result)
-                # Continue with next cycle unless critical error
-                continue
+                    # Measure during ON time
+                    if on_time > 0.1:  # Only measure if ON time is long enough
+                        time.sleep(0.1)  # Brief delay for stabilization
+                        voltage_measured = self.measure_voltage()
+                        cycle_result['measurements'].append({
+                            'time': time.time() - cycle_start_time,
+                            'voltage': voltage_measured,
+                            'state': 'ON'
+                        })
+                    
+                    # Wait for ON time with progress bar
+                    if show_progress and on_time > 0.1:
+                        self._show_progress(on_time, f"Cycle {cycle_num}/{cycles} - Power ON | Power OFF in {on_time:.1f}s")
+                    else:
+                        time.sleep(on_time)
+                
+                    # Turn output OFF
+                    self.output_off()
+                    off_start = time.time()
+                    
+                    # Wait for OFF time with progress bar
+                    if show_progress and off_time > 0.1:
+                        next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
+                        self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
+                    else:
+                        time.sleep(off_time)
+                    
+                    cycle_end_time = time.time()
+                    cycle_result['end_time'] = cycle_end_time
+                    cycle_result['total_duration'] = cycle_end_time - cycle_start_time
+                    
+                    cycle_results.append(cycle_result)
+                    self.logger.info(f"Cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
+                    print(f"Cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
+                    
+                    # Call callback if provided
+                    if callback:
+                        self.logger.debug(f"Calling callback for cycle {cycle_num}")
+                        callback(cycle_num, cycle_result)
+                        
+                except Exception as e:
+                    self.logger.error(f"Error during cycle {cycle_num}: {e}")
+                    print(f"Error during cycle {cycle_num}: {e}")
+                    cycle_result['error'] = str(e)
+                    cycle_results.append(cycle_result)
+                    # Continue with next cycle unless critical error
+                    continue
         
         except KeyboardInterrupt:
             self.logger.warning("Power cycling interrupted by user (Ctrl+C)")
@@ -426,76 +426,76 @@ class KeysightE3632A_RS232:
         
         try:
             for cycle_num in range(1, cycles + 1):
-            cycle_start_time = time.time()
-            self.logger.info(f"Starting ramp cycle {cycle_num}/{cycles}")
-            
-            cycle_result = {
-                'cycle': cycle_num,
-                'start_time': cycle_start_time,
-                'on_time': on_time,
-                'off_time': off_time,
-                'voltage_start': voltage_start,
-                'voltage_end': voltage_end,
-                'voltage_steps': voltage_steps,
-                'measurements': []
-            }
-            
-            try:
-                # Turn output ON
-                self.output_on()
+                cycle_start_time = time.time()
+                self.logger.info(f"Starting ramp cycle {cycle_num}/{cycles}")
                 
-                # Perform voltage ramp with progress bar
-                voltage_step_size = (voltage_end - voltage_start) / voltage_steps
-                step_time = on_time / voltage_steps
+                cycle_result = {
+                    'cycle': cycle_num,
+                    'start_time': cycle_start_time,
+                    'on_time': on_time,
+                    'off_time': off_time,
+                    'voltage_start': voltage_start,
+                    'voltage_end': voltage_end,
+                    'voltage_steps': voltage_steps,
+                    'measurements': []
+                }
                 
-                # Always perform voltage ramp, with or without progress bar
-                for step in range(voltage_steps + 1):
-                    voltage = voltage_start + (step * voltage_step_size)
-                    self.set_voltage(voltage)
+                try:
+                    # Turn output ON
+                    self.output_on()
                     
-                    # Measure voltage after brief stabilization
-                    time.sleep(0.05)
-                    voltage_measured = self.measure_voltage()
-                    cycle_result['measurements'].append({
-                        'time': time.time() - cycle_start_time,
-                        'voltage_set': voltage,
-                        'voltage_measured': voltage_measured,
-                        'step': step,
-                        'state': 'ON'
-                    })
+                    # Perform voltage ramp with progress bar
+                    voltage_step_size = (voltage_end - voltage_start) / voltage_steps
+                    step_time = on_time / voltage_steps
                     
-                    # Wait for step time
-                    time.sleep(step_time)
+                    # Always perform voltage ramp, with or without progress bar
+                    for step in range(voltage_steps + 1):
+                        voltage = voltage_start + (step * voltage_step_size)
+                        self.set_voltage(voltage)
+                        
+                        # Measure voltage after brief stabilization
+                        time.sleep(0.05)
+                        voltage_measured = self.measure_voltage()
+                        cycle_result['measurements'].append({
+                            'time': time.time() - cycle_start_time,
+                            'voltage_set': voltage,
+                            'voltage_measured': voltage_measured,
+                            'step': step,
+                            'state': 'ON'
+                        })
+                        
+                        # Wait for step time
+                        time.sleep(step_time)
                 
-                # Turn output OFF
-                self.output_off()
-                
-                # Wait for OFF time with progress bar
-                if show_progress and off_time > 0.1:
-                    next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
-                    self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
-                else:
-                    time.sleep(off_time)
-                
-                cycle_end_time = time.time()
-                cycle_result['end_time'] = cycle_end_time
-                cycle_result['total_duration'] = cycle_end_time - cycle_start_time
-                
-                cycle_results.append(cycle_result)
-                self.logger.info(f"Ramp cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
-                print(f"Ramp cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
-                
-                # Call callback if provided
-                if callback:
-                    self.logger.debug(f"Calling callback for ramp cycle {cycle_num}")
-                    callback(cycle_num, cycle_result)
+                    # Turn output OFF
+                    self.output_off()
                     
-            except Exception as e:
-                self.logger.error(f"Error during ramp cycle {cycle_num}: {e}")
-                print(f"Error during ramp cycle {cycle_num}: {e}")
-                cycle_result['error'] = str(e)
-                cycle_results.append(cycle_result)
-                continue
+                    # Wait for OFF time with progress bar
+                    if show_progress and off_time > 0.1:
+                        next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
+                        self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
+                    else:
+                        time.sleep(off_time)
+                    
+                    cycle_end_time = time.time()
+                    cycle_result['end_time'] = cycle_end_time
+                    cycle_result['total_duration'] = cycle_end_time - cycle_start_time
+                    
+                    cycle_results.append(cycle_result)
+                    self.logger.info(f"Ramp cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
+                    print(f"Ramp cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
+                    
+                    # Call callback if provided
+                    if callback:
+                        self.logger.debug(f"Calling callback for ramp cycle {cycle_num}")
+                        callback(cycle_num, cycle_result)
+                        
+                except Exception as e:
+                    self.logger.error(f"Error during ramp cycle {cycle_num}: {e}")
+                    print(f"Error during ramp cycle {cycle_num}: {e}")
+                    cycle_result['error'] = str(e)
+                    cycle_results.append(cycle_result)
+                    continue
         
         except KeyboardInterrupt:
             self.logger.warning("Voltage ramp cycling interrupted by user (Ctrl+C)")
@@ -748,57 +748,57 @@ class KeysightE3632A_GPIB:
                 }
                 
                 try:
-                # Turn output ON
-                self.output_on()
-                on_start = time.time()
-                
-                # Measure during ON time
-                if on_time > 0.1:  # Only measure if ON time is long enough
-                    time.sleep(0.1)  # Brief delay for stabilization
-                    voltage_measured = self.measure_voltage()
-                    cycle_result['measurements'].append({
-                        'time': time.time() - cycle_start_time,
-                        'voltage': voltage_measured,
-                        'state': 'ON'
-                    })
-                
-                # Wait for ON time with progress bar
-                if show_progress and on_time > 0.1:
-                    self._show_progress(on_time, f"Cycle {cycle_num}/{cycles} - Power ON | Power OFF in {on_time:.1f}s")
-                else:
-                    time.sleep(on_time)
-                
-                # Turn output OFF
-                self.output_off()
-                off_start = time.time()
-                
-                # Wait for OFF time with progress bar
-                if show_progress and off_time > 0.1:
-                    next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
-                    self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
-                else:
-                    time.sleep(off_time)
-                
-                cycle_end_time = time.time()
-                cycle_result['end_time'] = cycle_end_time
-                cycle_result['total_duration'] = cycle_end_time - cycle_start_time
-                
-                cycle_results.append(cycle_result)
-                self.logger.info(f"Cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
-                print(f"Cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
-                
-                # Call callback if provided
-                if callback:
-                    self.logger.debug(f"Calling callback for cycle {cycle_num}")
-                    callback(cycle_num, cycle_result)
+                    # Turn output ON
+                    self.output_on()
+                    on_start = time.time()
                     
-            except Exception as e:
-                self.logger.error(f"Error during cycle {cycle_num}: {e}")
-                print(f"Error during cycle {cycle_num}: {e}")
-                cycle_result['error'] = str(e)
-                cycle_results.append(cycle_result)
-                # Continue with next cycle unless critical error
-                continue
+                    # Measure during ON time
+                    if on_time > 0.1:  # Only measure if ON time is long enough
+                        time.sleep(0.1)  # Brief delay for stabilization
+                        voltage_measured = self.measure_voltage()
+                        cycle_result['measurements'].append({
+                            'time': time.time() - cycle_start_time,
+                            'voltage': voltage_measured,
+                            'state': 'ON'
+                        })
+                    
+                    # Wait for ON time with progress bar
+                    if show_progress and on_time > 0.1:
+                        self._show_progress(on_time, f"Cycle {cycle_num}/{cycles} - Power ON | Power OFF in {on_time:.1f}s")
+                    else:
+                        time.sleep(on_time)
+                
+                    # Turn output OFF
+                    self.output_off()
+                    off_start = time.time()
+                    
+                    # Wait for OFF time with progress bar
+                    if show_progress and off_time > 0.1:
+                        next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
+                        self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
+                    else:
+                        time.sleep(off_time)
+                    
+                    cycle_end_time = time.time()
+                    cycle_result['end_time'] = cycle_end_time
+                    cycle_result['total_duration'] = cycle_end_time - cycle_start_time
+                    
+                    cycle_results.append(cycle_result)
+                    self.logger.info(f"Cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
+                    print(f"Cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
+                    
+                    # Call callback if provided
+                    if callback:
+                        self.logger.debug(f"Calling callback for cycle {cycle_num}")
+                        callback(cycle_num, cycle_result)
+                        
+                except Exception as e:
+                    self.logger.error(f"Error during cycle {cycle_num}: {e}")
+                    print(f"Error during cycle {cycle_num}: {e}")
+                    cycle_result['error'] = str(e)
+                    cycle_results.append(cycle_result)
+                    # Continue with next cycle unless critical error
+                    continue
         
         except KeyboardInterrupt:
             self.logger.warning("Power cycling interrupted by user (Ctrl+C)")
@@ -847,76 +847,76 @@ class KeysightE3632A_GPIB:
         
         try:
             for cycle_num in range(1, cycles + 1):
-            cycle_start_time = time.time()
-            self.logger.info(f"Starting ramp cycle {cycle_num}/{cycles}")
-            
-            cycle_result = {
-                'cycle': cycle_num,
-                'start_time': cycle_start_time,
-                'on_time': on_time,
-                'off_time': off_time,
-                'voltage_start': voltage_start,
-                'voltage_end': voltage_end,
-                'voltage_steps': voltage_steps,
-                'measurements': []
-            }
-            
-            try:
-                # Turn output ON
-                self.output_on()
+                cycle_start_time = time.time()
+                self.logger.info(f"Starting ramp cycle {cycle_num}/{cycles}")
                 
-                # Perform voltage ramp with progress bar
-                voltage_step_size = (voltage_end - voltage_start) / voltage_steps
-                step_time = on_time / voltage_steps
+                cycle_result = {
+                    'cycle': cycle_num,
+                    'start_time': cycle_start_time,
+                    'on_time': on_time,
+                    'off_time': off_time,
+                    'voltage_start': voltage_start,
+                    'voltage_end': voltage_end,
+                    'voltage_steps': voltage_steps,
+                    'measurements': []
+                }
                 
-                # Always perform voltage ramp, with or without progress bar
-                for step in range(voltage_steps + 1):
-                    voltage = voltage_start + (step * voltage_step_size)
-                    self.set_voltage(voltage)
+                try:
+                    # Turn output ON
+                    self.output_on()
                     
-                    # Measure voltage after brief stabilization
-                    time.sleep(0.05)
-                    voltage_measured = self.measure_voltage()
-                    cycle_result['measurements'].append({
-                        'time': time.time() - cycle_start_time,
-                        'voltage_set': voltage,
-                        'voltage_measured': voltage_measured,
-                        'step': step,
-                        'state': 'ON'
-                    })
+                    # Perform voltage ramp with progress bar
+                    voltage_step_size = (voltage_end - voltage_start) / voltage_steps
+                    step_time = on_time / voltage_steps
                     
-                    # Wait for step time
-                    time.sleep(step_time)
+                    # Always perform voltage ramp, with or without progress bar
+                    for step in range(voltage_steps + 1):
+                        voltage = voltage_start + (step * voltage_step_size)
+                        self.set_voltage(voltage)
+                        
+                        # Measure voltage after brief stabilization
+                        time.sleep(0.05)
+                        voltage_measured = self.measure_voltage()
+                        cycle_result['measurements'].append({
+                            'time': time.time() - cycle_start_time,
+                            'voltage_set': voltage,
+                            'voltage_measured': voltage_measured,
+                            'step': step,
+                            'state': 'ON'
+                        })
+                        
+                        # Wait for step time
+                        time.sleep(step_time)
                 
-                # Turn output OFF
-                self.output_off()
-                
-                # Wait for OFF time with progress bar
-                if show_progress and off_time > 0.1:
-                    next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
-                    self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
-                else:
-                    time.sleep(off_time)
-                
-                cycle_end_time = time.time()
-                cycle_result['end_time'] = cycle_end_time
-                cycle_result['total_duration'] = cycle_end_time - cycle_start_time
-                
-                cycle_results.append(cycle_result)
-                self.logger.info(f"Ramp cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
-                print(f"Ramp cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
-                
-                # Call callback if provided
-                if callback:
-                    self.logger.debug(f"Calling callback for ramp cycle {cycle_num}")
-                    callback(cycle_num, cycle_result)
+                    # Turn output OFF
+                    self.output_off()
                     
-            except Exception as e:
-                self.logger.error(f"Error during ramp cycle {cycle_num}: {e}")
-                print(f"Error during ramp cycle {cycle_num}: {e}")
-                cycle_result['error'] = str(e)
-                cycle_results.append(cycle_result)
-                continue
+                    # Wait for OFF time with progress bar
+                    if show_progress and off_time > 0.1:
+                        next_state = f"Power ON in {off_time:.1f}s" if cycle_num < cycles else "Cycle complete"
+                        self._show_progress(off_time, f"Cycle {cycle_num}/{cycles} - Power OFF | {next_state}")
+                    else:
+                        time.sleep(off_time)
+                    
+                    cycle_end_time = time.time()
+                    cycle_result['end_time'] = cycle_end_time
+                    cycle_result['total_duration'] = cycle_end_time - cycle_start_time
+                    
+                    cycle_results.append(cycle_result)
+                    self.logger.info(f"Ramp cycle {cycle_num}/{cycles} completed successfully in {cycle_result['total_duration']:.2f}s")
+                    print(f"Ramp cycle {cycle_num}/{cycles} completed in {cycle_result['total_duration']:.2f}s")
+                    
+                    # Call callback if provided
+                    if callback:
+                        self.logger.debug(f"Calling callback for ramp cycle {cycle_num}")
+                        callback(cycle_num, cycle_result)
+                        
+                except Exception as e:
+                    self.logger.error(f"Error during ramp cycle {cycle_num}: {e}")
+                    print(f"Error during ramp cycle {cycle_num}: {e}")
+                    cycle_result['error'] = str(e)
+                    cycle_results.append(cycle_result)
+                    continue
         
         except KeyboardInterrupt:
             self.logger.warning("Voltage ramp cycling interrupted by user (Ctrl+C)")

@@ -479,12 +479,13 @@ def show_main_menu():
         print("3. Log Analysis")
         print("4. JTAG Operations")
         print("5. STM32 Operations")
-        print("6. Help & Documentation")
-        print("7. Exit")
+        print("6. Serial Logger")
+        print("7. Help & Documentation")
+        print("8. Exit")
         print()
         
         try:
-            choice = input("Select an option (1-7): ").strip()
+            choice = input("Select an option (1-8): ").strip()
             
             if choice == '1':
                 run_tests_menu()
@@ -497,12 +498,14 @@ def show_main_menu():
             elif choice == '5':
                 stm32_operations_menu()
             elif choice == '6':
-                help_menu()
+                serial_logger_menu()
             elif choice == '7':
+                help_menu()
+            elif choice == '8':
                 print("Goodbye!")
                 break
             else:
-                print("❌ Invalid choice. Please select 1-7.")
+                print("❌ Invalid choice. Please select 1-8.")
                 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
@@ -823,6 +826,302 @@ def list_stm32_templates():
         
     except Exception as e:
         print(f"❌ Error listing STM32 templates: {e}")
+
+
+def serial_logger_menu():
+    """Menu for serial logger operations."""
+    while True:
+        print("\n" + "-" * 40)
+        print("SERIAL LOGGER")
+        print("-" * 40)
+        print("1. Start Serial Logger")
+        print("2. Parse Serial Data")
+        print("3. Generate Serial Logger Config")
+        print("4. List Data Parsing Patterns")
+        print("5. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-5): ").strip()
+            
+            if choice == '1':
+                start_serial_logger()
+            elif choice == '2':
+                parse_serial_data()
+            elif choice == '3':
+                generate_serial_logger_config()
+            elif choice == '4':
+                list_data_parsing_patterns()
+            elif choice == '5':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-5.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def start_serial_logger():
+    """Start serial logger with optional data parsing."""
+    try:
+        from libs.serial_logger import SerialLogger
+        
+        # Get configuration file
+        config_file = input("Enter serial logger config file path (or press Enter for default): ").strip()
+        if not config_file:
+            config_file = "config/serial_logger_config.json"
+        
+        # Check if config file exists
+        if not os.path.exists(config_file):
+            print(f"❌ Configuration file not found: {config_file}")
+            print("Use option 3 to generate a sample configuration file.")
+            return
+        
+        # Load configuration
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        # Ask if user wants to parse data
+        parse_data = input("Do you want to parse data in real-time? (y/n): ").strip().lower()
+        parse_enabled = parse_data in ['y', 'yes']
+        
+        if parse_enabled:
+            print("Real-time data parsing enabled")
+        else:
+            print("Raw data logging only")
+        
+        # Create and start serial logger
+        logger = SerialLogger(config, parse_data=parse_enabled)
+        
+        print(f"Starting serial logger on {config['serial']['port']} at {config['serial']['baud']} baud...")
+        print("Press Ctrl+C to stop logging")
+        
+        try:
+            logger.start_logging()
+        except KeyboardInterrupt:
+            print("\n⚠️ Serial logging stopped by user")
+            logger.stop_logging()
+            
+            # Ask if user wants to parse the logged data
+            if not parse_enabled:
+                parse_logged = input("Do you want to parse the logged data now? (y/n): ").strip().lower()
+                if parse_logged in ['y', 'yes']:
+                    parse_serial_data_from_file(logger.get_log_file())
+        
+    except ImportError:
+        print("❌ Serial logger not available")
+    except Exception as e:
+        print(f"❌ Error starting serial logger: {e}")
+
+
+def parse_serial_data():
+    """Parse serial data from a log file."""
+    try:
+        from libs.serial_logger import SerialDataParser
+        
+        # Get log file path
+        log_file = input("Enter log file path to parse: ").strip()
+        if not log_file:
+            print("❌ No log file specified")
+            return
+        
+        if not os.path.exists(log_file):
+            print(f"❌ Log file not found: {log_file}")
+            return
+        
+        # Get configuration file
+        config_file = input("Enter parsing config file path (or press Enter for default): ").strip()
+        if not config_file:
+            config_file = "config/serial_logger_config.json"
+        
+        if not os.path.exists(config_file):
+            print(f"❌ Configuration file not found: {config_file}")
+            return
+        
+        # Load configuration
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        print(f"Parsing data from: {log_file}")
+        print("Using parsing patterns from configuration...")
+        
+        # Create parser and parse data
+        parser = SerialDataParser(config)
+        results = parser.parse_log_file(log_file)
+        
+        if results:
+            print(f"✅ Parsing completed successfully!")
+            print(f"Found {len(results)} parsed entries")
+            
+            # Display summary
+            parser.display_summary(results)
+            
+            # Ask if user wants to save results
+            save_results = input("Do you want to save parsed results? (y/n): ").strip().lower()
+            if save_results in ['y', 'yes']:
+                output_file = input("Enter output file path (or press Enter for default): ").strip()
+                if not output_file:
+                    output_file = f"parsed_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                
+                parser.save_results(results, output_file)
+                print(f"✅ Results saved to: {output_file}")
+        else:
+            print("❌ No data could be parsed from the log file")
+        
+    except ImportError:
+        print("❌ Serial data parser not available")
+    except Exception as e:
+        print(f"❌ Error parsing serial data: {e}")
+
+
+def parse_serial_data_from_file(log_file):
+    """Parse serial data from a specific log file."""
+    try:
+        from libs.serial_logger import SerialDataParser
+        
+        # Use default config
+        config_file = "config/serial_logger_config.json"
+        
+        if not os.path.exists(config_file):
+            print(f"❌ Configuration file not found: {config_file}")
+            return
+        
+        # Load configuration
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        print(f"Parsing data from: {log_file}")
+        
+        # Create parser and parse data
+        parser = SerialDataParser(config)
+        results = parser.parse_log_file(log_file)
+        
+        if results:
+            print(f"✅ Parsing completed successfully!")
+            print(f"Found {len(results)} parsed entries")
+            parser.display_summary(results)
+        else:
+            print("❌ No data could be parsed from the log file")
+        
+    except Exception as e:
+        print(f"❌ Error parsing serial data: {e}")
+
+
+def generate_serial_logger_config():
+    """Generate serial logger configuration."""
+    try:
+        # Create sample serial logger configuration
+        sample_config = {
+            "serial": {
+                "port": "COM3",
+                "baud": 115200,
+                "timeout": 1.0,
+                "parity": "N",
+                "stopbits": 1,
+                "bytesize": 8
+            },
+            "logging": {
+                "log_directory": "./output/serial_logs",
+                "log_format": "timestamp,data",
+                "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+                "auto_create_dirs": True
+            },
+            "data_parsing": {
+                "enabled": True,
+                "patterns": [
+                    {
+                        "name": "numeric_data",
+                        "description": "Extract numeric values from serial data",
+                        "regex": "^(\\d+(?:\\.\\d+)?)\\r?\\n$",
+                        "type": "float",
+                        "extract_groups": [1]
+                    },
+                    {
+                        "name": "status_message",
+                        "description": "Extract status messages",
+                        "regex": "STATUS:\\s*(\\w+)",
+                        "type": "string",
+                        "extract_groups": [1]
+                    },
+                    {
+                        "name": "sensor_data",
+                        "description": "Extract sensor readings with labels",
+                        "regex": "SENSOR\\s+(\\w+):\\s*(\\d+(?:\\.\\d+)?)",
+                        "type": "sensor",
+                        "extract_groups": [1, 2],
+                        "labels": ["sensor_name", "value"]
+                    },
+                    {
+                        "name": "error_codes",
+                        "description": "Extract error codes",
+                        "regex": "ERROR\\s+(\\d+):\\s*(.+)",
+                        "type": "error",
+                        "extract_groups": [1, 2],
+                        "labels": ["error_code", "message"]
+                    }
+                ],
+                "output_formats": ["json", "csv", "txt"],
+                "save_raw_data": True
+            },
+            "filters": {
+                "min_data_length": 1,
+                "max_data_length": 1000,
+                "exclude_patterns": ["^\\s*$", "^\\r?\\n$"],
+                "include_patterns": []
+            }
+        }
+        
+        filename = "config/serial_logger_config.json"
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(sample_config, f, indent=2)
+        
+        print(f"✅ Serial logger configuration generated: {filename}")
+        print("Edit this file with your specific serial settings and parsing patterns.")
+        
+    except Exception as e:
+        print(f"❌ Error generating serial logger configuration: {e}")
+
+
+def list_data_parsing_patterns():
+    """List available data parsing patterns."""
+    try:
+        config_file = "config/serial_logger_config.json"
+        if not os.path.exists(config_file):
+            print(f"❌ Configuration file not found: {config_file}")
+            print("Use option 3 to generate a sample configuration file.")
+            return
+        
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        patterns = config.get('data_parsing', {}).get('patterns', [])
+        if not patterns:
+            print("No parsing patterns configured")
+            return
+        
+        print("Available Data Parsing Patterns:")
+        print("=" * 50)
+        
+        for i, pattern in enumerate(patterns):
+            print(f"\n{i+1}. {pattern.get('name', 'Unnamed').upper()}:")
+            print(f"   Description: {pattern.get('description', 'No description')}")
+            print(f"   Type: {pattern.get('type', 'string')}")
+            print(f"   Regex: {pattern.get('regex', 'Not specified')}")
+            
+            extract_groups = pattern.get('extract_groups', [])
+            if extract_groups:
+                print(f"   Extract Groups: {extract_groups}")
+            
+            labels = pattern.get('labels', [])
+            if labels:
+                print(f"   Labels: {labels}")
+        
+        print(f"\nTotal patterns: {len(patterns)}")
+        
+    except Exception as e:
+        print(f"❌ Error listing parsing patterns: {e}")
 
 
 def help_menu():
@@ -1538,6 +1837,7 @@ def show_project_structure():
     print("│   ├── test_template_loader.py # Template system")
     print("│   ├── comprehensive_logger.py # Multi-file logging")
     print("│   ├── log_parser.py         # Log analysis")
+    print("│   ├── serial_logger.py     # Serial logger with parsing")
     print("│   ├── xilinx_jtag.py       # Xilinx JTAG interface")
     print("│   ├── xilinx_bootgen.py    # Bootgen utility")
     print("│   ├── xilinx_tools_manager.py # Tools manager")
@@ -1589,16 +1889,22 @@ def show_quick_start_guide():
     print("   - Run STM32 log capture tests")
     print("   - Generate STM32 configurations")
     print()
-    print("6. Analyze Results:")
+    print("6. Serial Logger:")
+    print("   - Menu: 6. Serial Logger")
+    print("   - Start serial data logging")
+    print("   - Parse serial data with configurable patterns")
+    print("   - Real-time or post-processing data analysis")
+    print()
+    print("7. Analyze Results:")
     print("   python main.py --parse-logs")
     print("   # or menu: 3. Log Analysis")
     print()
-    print("7. View Examples:")
+    print("8. View Examples:")
     print("   python examples/xilinx_tools_comprehensive_demo.py")
     print("   python examples/xilinx_jtag_demo.py")
     print("   python scripts/jtag_integration_demo.py")
     print()
-    print("8. Read Documentation:")
+    print("9. Read Documentation:")
     print("   - docs/xilinx_tools_comprehensive_guide.md")
     print("   - docs/xilinx_jtag_guide.md")
     print("   - docs/stm32_log_capture_guide.md")
