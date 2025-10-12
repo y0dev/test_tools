@@ -478,12 +478,13 @@ def show_main_menu():
         print("2. Configuration Management")
         print("3. Log Analysis")
         print("4. JTAG Operations")
-        print("5. Help & Documentation")
-        print("6. Exit")
+        print("5. STM32 Operations")
+        print("6. Help & Documentation")
+        print("7. Exit")
         print()
         
         try:
-            choice = input("Select an option (1-6): ").strip()
+            choice = input("Select an option (1-7): ").strip()
             
             if choice == '1':
                 run_tests_menu()
@@ -494,12 +495,14 @@ def show_main_menu():
             elif choice == '4':
                 jtag_operations_menu()
             elif choice == '5':
-                help_menu()
+                stm32_operations_menu()
             elif choice == '6':
+                help_menu()
+            elif choice == '7':
                 print("Goodbye!")
                 break
             else:
-                print("❌ Invalid choice. Please select 1-6.")
+                print("❌ Invalid choice. Please select 1-7.")
                 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
@@ -627,13 +630,15 @@ def jtag_operations_menu():
         print("2. JTAG Device Detection")
         print("3. Generate Boot Image")
         print("4. Vivado Operations")
-        print("5. JTAG Demo")
-        print("6. Generate JTAG Config")
-        print("7. Back to Main Menu")
+        print("5. Run Comprehensive Demo")
+        print("6. Run JTAG Demo")
+        print("7. Run Integration Demo")
+        print("8. Generate JTAG Config")
+        print("9. Back to Main Menu")
         print()
         
         try:
-            choice = input("Select an option (1-7): ").strip()
+            choice = input("Select an option (1-9): ").strip()
             
             if choice == '1':
                 run_jtag_test()
@@ -644,18 +649,180 @@ def jtag_operations_menu():
             elif choice == '4':
                 vivado_operations_menu()
             elif choice == '5':
-                run_jtag_demo()
+                run_comprehensive_demo()
             elif choice == '6':
-                generate_jtag_config()
+                run_jtag_demo()
             elif choice == '7':
+                run_integration_demo()
+            elif choice == '8':
+                generate_jtag_config()
+            elif choice == '9':
                 break
             else:
-                print("❌ Invalid choice. Please select 1-7.")
+                print("❌ Invalid choice. Please select 1-9.")
                 
         except KeyboardInterrupt:
             break
         except Exception as e:
             print(f"❌ Error: {e}")
+
+
+def stm32_operations_menu():
+    """Menu for STM32 operations."""
+    while True:
+        print("\n" + "-" * 40)
+        print("STM32 OPERATIONS")
+        print("-" * 40)
+        print("1. Run STM32 Log Capture Test")
+        print("2. Generate STM32 Config")
+        print("3. List STM32 Templates")
+        print("4. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-4): ").strip()
+            
+            if choice == '1':
+                run_stm32_log_capture_test()
+            elif choice == '2':
+                generate_stm32_config()
+            elif choice == '3':
+                list_stm32_templates()
+            elif choice == '4':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-4.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def run_stm32_log_capture_test():
+    """Run STM32 log capture test."""
+    try:
+        import subprocess
+        import sys
+        
+        test_script = "stm32_log_capture_test.py"
+        if not os.path.exists(test_script):
+            print(f"❌ STM32 test script not found: {test_script}")
+            return
+        
+        print("Running STM32 log capture test...")
+        print("This will test STM32 UART logging and pattern validation")
+        print()
+        
+        # Ask for configuration file
+        config_file = input("Enter configuration file path (or press Enter for default): ").strip()
+        if not config_file:
+            config_file = "config/stm32_log_capture_config.json"
+        
+        # Build command
+        cmd = [sys.executable, test_script]
+        if config_file and os.path.exists(config_file):
+            cmd.extend(["--config", config_file])
+        
+        print(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=False)
+        
+        if result.returncode == 0:
+            print("✅ STM32 log capture test completed successfully")
+        else:
+            print("❌ STM32 log capture test failed")
+        
+    except Exception as e:
+        print(f"❌ Error running STM32 test: {e}")
+
+
+def generate_stm32_config():
+    """Generate STM32 configuration."""
+    try:
+        # Create sample STM32 configuration
+        sample_config = {
+            "power_supply": {
+                "resource": "GPIB0::5::INSTR",
+                "voltage": 3.3,
+                "current_limit": 0.5
+            },
+            "uart_loggers": [
+                {
+                    "port": "COM3",
+                    "baud": 115200,
+                    "display": True
+                }
+            ],
+            "tests": [
+                {
+                    "name": "STM32 Log Capture Test",
+                    "description": "Capture and validate STM32 UART output",
+                    "cycles": 1,
+                    "on_time": 10,
+                    "off_time": 5,
+                    "output_format": "json",
+                    "uart_patterns": [
+                        {
+                            "regex": "^(\\d+)\\r\\n$",
+                            "expected": ["5"],
+                            "description": "Capture numeric output from DEV_SAMPLE_FUNCTION"
+                        }
+                    ]
+                }
+            ],
+            "output": {
+                "log_directory": "./output/logs",
+                "report_directory": "./output/reports",
+                "log_level": "INFO"
+            }
+        }
+        
+        filename = "config/stm32_log_capture_config.json"
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(sample_config, f, indent=2)
+        
+        print(f"✅ STM32 configuration generated: {filename}")
+        print("Edit this file with your specific STM32 settings.")
+        
+    except Exception as e:
+        print(f"❌ Error generating STM32 configuration: {e}")
+
+
+def list_stm32_templates():
+    """List STM32 test templates."""
+    try:
+        config_file = "config/stm32_test_templates.json"
+        if not os.path.exists(config_file):
+            print(f"❌ STM32 templates file not found: {config_file}")
+            return
+        
+        with open(config_file, 'r') as f:
+            templates_data = json.load(f)
+        
+        templates = templates_data.get('test_templates', {})
+        if not templates:
+            print("No STM32 templates found")
+            return
+        
+        print("Available STM32 Test Templates:")
+        print("=" * 50)
+        
+        for template_name, template_data in templates.items():
+            print(f"\n{template_name.upper()}:")
+            print(f"  Description: {template_data.get('description', 'No description')}")
+            print(f"  Output Format: {template_data.get('output_format', 'json')}")
+            
+            patterns = template_data.get('uart_patterns', [])
+            if patterns:
+                print(f"  Patterns: {len(patterns)} pattern(s)")
+                for i, pattern in enumerate(patterns):
+                    desc = pattern.get('description', 'No description')
+                    print(f"    {i+1}. {desc}")
+        
+        print(f"\nTotal templates: {len(templates)}")
+        
+    except Exception as e:
+        print(f"❌ Error listing STM32 templates: {e}")
 
 
 def help_menu():
@@ -1076,6 +1243,105 @@ def list_vivado_projects():
         print(f"❌ Error listing projects: {e}")
 
 
+def run_comprehensive_demo():
+    """Run comprehensive Xilinx tools demo."""
+    try:
+        import subprocess
+        import sys
+        
+        demo_script = "examples/xilinx_tools_comprehensive_demo.py"
+        if not os.path.exists(demo_script):
+            print(f"❌ Demo script not found: {demo_script}")
+            return
+        
+        print("Comprehensive Xilinx Tools Demo")
+        print("=" * 40)
+        print("1. Run All Demos")
+        print("2. Tool Path Resolution Demo")
+        print("3. Bootgen Operations Demo")
+        print("4. Vivado Operations Demo")
+        print("5. JTAG Operations Demo")
+        print("6. Configuration Management Demo")
+        print("7. Back to JTAG Menu")
+        print()
+        
+        choice = input("Select demo type (1-7): ").strip()
+        
+        if choice == '7':
+            return
+        
+        # Ask for configuration file
+        config_file = input("Enter configuration file path (or press Enter for default): ").strip()
+        if not config_file:
+            config_file = "config/xilinx_jtag_config.json"
+        
+        # Build command based on choice
+        cmd = [sys.executable, demo_script]
+        if config_file and os.path.exists(config_file):
+            cmd.extend(["--config", config_file])
+        
+        demo_map = {
+            '1': 'all',
+            '2': 'paths',
+            '3': 'bootgen',
+            '4': 'vivado',
+            '5': 'jtag',
+            '6': 'config'
+        }
+        
+        if choice in demo_map:
+            if choice != '1':  # Not "all"
+                cmd.extend(["--demo", demo_map[choice]])
+        
+        print(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=False)
+        
+        if result.returncode == 0:
+            print("✅ Demo completed successfully")
+        else:
+            print("❌ Demo failed")
+        
+    except Exception as e:
+        print(f"❌ Error running comprehensive demo: {e}")
+
+
+def run_integration_demo():
+    """Run JTAG integration demo."""
+    try:
+        import subprocess
+        import sys
+        
+        demo_script = "scripts/jtag_integration_demo.py"
+        if not os.path.exists(demo_script):
+            print(f"❌ Demo script not found: {demo_script}")
+            return
+        
+        print("Running JTAG integration demo...")
+        print("This will demonstrate JTAG integration with the test framework")
+        print()
+        
+        # Ask for configuration file
+        config_file = input("Enter configuration file path (or press Enter for default): ").strip()
+        if not config_file:
+            config_file = "config/xilinx_jtag_config.json"
+        
+        # Build command
+        cmd = [sys.executable, demo_script]
+        if config_file and os.path.exists(config_file):
+            cmd.extend(["--config", config_file])
+        
+        print(f"Running command: {' '.join(cmd)}")
+        result = subprocess.run(cmd, capture_output=False)
+        
+        if result.returncode == 0:
+            print("✅ Integration demo completed successfully")
+        else:
+            print("❌ Integration demo failed")
+        
+    except Exception as e:
+        print(f"❌ Error running integration demo: {e}")
+
+
 def generate_jtag_config():
     """Generate JTAG configuration."""
     try:
@@ -1254,9 +1520,13 @@ def show_project_structure():
     print("├── main.py                    # Main CLI entry point")
     print("├── requirements.txt           # Python dependencies")
     print("├── README.md                  # Project overview")
+    print("├── stm32_log_capture_test.py   # STM32 test script")
     print("├── config/                    # Configuration files")
     print("│   ├── config.json           # Main configuration")
     print("│   ├── test_templates.json   # Test templates")
+    print("│   ├── xilinx_jtag_config.json # Xilinx JTAG configuration")
+    print("│   ├── bootgen_templates.json # Bootgen templates")
+    print("│   ├── stm32_test_templates.json # STM32 templates")
     print("│   └── example_*.json        # Example configurations")
     print("├── libs/                     # Core framework modules")
     print("│   ├── test_runner.py       # Main test orchestrator")
@@ -1267,10 +1537,20 @@ def show_project_structure():
     print("│   ├── report_generator.py  # Report generation")
     print("│   ├── test_template_loader.py # Template system")
     print("│   ├── comprehensive_logger.py # Multi-file logging")
-    print("│   └── log_parser.py         # Log analysis")
+    print("│   ├── log_parser.py         # Log analysis")
+    print("│   ├── xilinx_jtag.py       # Xilinx JTAG interface")
+    print("│   ├── xilinx_bootgen.py    # Bootgen utility")
+    print("│   ├── xilinx_tools_manager.py # Tools manager")
+    print("│   └── jtag_test_runner.py  # JTAG test runner")
     print("├── examples/                 # Example scripts")
+    print("│   ├── xilinx_jtag_demo.py  # JTAG functionality demos")
+    print("│   └── xilinx_tools_comprehensive_demo.py # Comprehensive demo")
     print("├── docs/                     # Documentation")
+    print("│   ├── xilinx_jtag_guide.md # JTAG guide")
+    print("│   ├── xilinx_tools_comprehensive_guide.md # Comprehensive guide")
+    print("│   └── stm32_log_capture_guide.md # STM32 guide")
     print("├── scripts/                  # Utility scripts")
+    print("│   └── jtag_integration_demo.py # Integration demo")
     print("└── output/                   # Generated output")
     print("    ├── logs/                # Log files")
     print("    └── reports/             # Test reports")
@@ -1287,26 +1567,41 @@ def show_quick_start_guide():
     print("1. Generate Sample Files:")
     print("   python main.py --generate-config")
     print("   python main.py --generate-templates")
+    print("   # Or use menu: 2. Configuration Management")
     print()
     print("2. Edit Configuration:")
     print("   - config/config.json - Hardware settings")
     print("   - config/test_templates.json - Test definitions")
+    print("   - config/xilinx_jtag_config.json - Xilinx tools")
+    print("   - config/stm32_test_templates.json - STM32 templates")
     print()
     print("3. Run Tests:")
     print("   python main.py --interactive")
     print("   # or just: python main.py")
     print()
-    print("4. Analyze Results:")
+    print("4. Xilinx Tools:")
+    print("   - Menu: 4. JTAG Operations")
+    print("   - Generate boot images, Vivado operations")
+    print("   - JTAG device detection and programming")
+    print()
+    print("5. STM32 Operations:")
+    print("   - Menu: 5. STM32 Operations")
+    print("   - Run STM32 log capture tests")
+    print("   - Generate STM32 configurations")
+    print()
+    print("6. Analyze Results:")
     print("   python main.py --parse-logs")
+    print("   # or menu: 3. Log Analysis")
     print()
-    print("5. View Examples:")
-    print("   python examples/template_demo.py")
-    print("   python examples/log_parsing_demo.py")
+    print("7. View Examples:")
+    print("   python examples/xilinx_tools_comprehensive_demo.py")
+    print("   python examples/xilinx_jtag_demo.py")
+    print("   python scripts/jtag_integration_demo.py")
     print()
-    print("6. Read Documentation:")
-    print("   - docs/README.md - Detailed documentation")
-    print("   - docs/configuration_guide.md - Configuration guide")
-    print("   - docs/usage_guide.md - Usage instructions")
+    print("8. Read Documentation:")
+    print("   - docs/xilinx_tools_comprehensive_guide.md")
+    print("   - docs/xilinx_jtag_guide.md")
+    print("   - docs/stm32_log_capture_guide.md")
     print()
     input("Press Enter to continue...")
 
