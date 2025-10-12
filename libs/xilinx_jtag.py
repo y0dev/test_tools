@@ -24,6 +24,9 @@ import logging
 import json
 import os
 import re
+import threading
+import signal
+import psutil
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
 from dataclasses import dataclass
@@ -73,6 +76,352 @@ class XilinxJTAGError(Exception):
     pass
 
 
+class TerminalProcessManager:
+    """
+    Manages Xilinx tools running in separate terminal windows.
+    
+    This class provides functionality to launch xsct/xsdb in separate terminals,
+    monitor their health, capture output, and provide control commands.
+    """
+    
+    def __init__(self, logger: Optional[logging.Logger] = None):
+        """
+        Initialize terminal process manager.
+        
+        Args:
+            logger: Optional logger instance
+        """
+        self.logger = logger or logging.getLogger(__name__)
+        self.processes: Dict[str, Dict[str, Any]] = {}
+        self.monitoring_threads: Dict[str, threading.Thread] = {}
+        self.running = False
+        
+    def launch_in_separate_terminal(self, tool_name: str, executable_path: str, 
+                                  args: List[str] = None, title: str = None) -> bool:
+        """
+        Launch a Xilinx tool in a separate terminal window.
+        
+        Args:
+            tool_name: Name identifier for the process
+            executable_path: Path to the executable
+            args: Command line arguments
+            title: Terminal window title
+            
+        Returns:
+            True if launched successfully, False otherwise
+        """
+        try:
+            if args is None:
+                args = []
+            
+            if title is None:
+                title = f"{tool_name} - Xilinx Tool"
+            
+            # Determine platform-specific command
+            if os.name == 'nt':  # Windows
+                cmd = self._create_windows_terminal_command(executable_path, args, title)
+            else:  # Linux/Mac
+                cmd = self._create_unix_terminal_command(executable_path, args, title)
+            
+            self.logger.info(f"Launching {tool_name} in separate terminal: {cmd}")
+            
+            # Start the process
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                universal_newlines=True
+            )
+            
+            # Store process information
+            self.processes[tool_name] = {
+                'process': process,
+                'executable': executable_path,
+                'args': args,
+                'title': title,
+                'start_time': time.time(),
+                'status': 'running',
+                'output_buffer': [],
+                'error_buffer': []
+            }
+            
+            # Start monitoring thread
+            self._start_monitoring(tool_name)
+            
+            self.logger.info(f"Successfully launched {tool_name} (PID: {process.pid})")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to launch {tool_name}: {e}")
+            return False
+    
+    def _create_windows_terminal_command(self, executable_path: str, args: List[str], title: str) -> List[str]:
+        """Create Windows command to launch tool in separate terminal."""
+        cmd_args = ' '.join([executable_path] + args)
+        
+        # Use Windows Terminal if available, otherwise cmd
+        if self._is_windows_terminal_available():
+            return [
+                'wt.exe', 
+                '--title', title,
+                '--', 'cmd.exe', '/k', cmd_args
+            ]
+        else:
+            return [
+                'cmd.exe', '/k', 
+                f'title {title} && {cmd_args}'
+            ]
+    
+    def _create_unix_terminal_command(self, executable_path: str, args: List[str], title: str) -> List[str]:
+        """Create Unix command to launch tool in separate terminal."""
+        cmd_args = ' '.join([executable_path] + args)
+        
+        # Try different terminal emulators
+        terminals = ['gnome-terminal', 'xterm', 'konsole', 'terminator']
+        
+        for terminal in terminals:
+            if self._is_command_available(terminal):
+                if terminal == 'gnome-terminal':
+                    return [terminal, '--title', title, '--', 'bash', '-c', f'{cmd_args}; exec bash']
+                elif terminal == 'xterm':
+                    return [terminal, '-title', title, '-e', 'bash', '-c', f'{cmd_args}; exec bash']
+                elif terminal == 'konsole':
+                    return [terminal, '--title', title, '-e', 'bash', '-c', f'{cmd_args}; exec bash']
+                elif terminal == 'terminator':
+                    return [terminal, '--title', title, '-e', f'bash -c "{cmd_args}; exec bash"']
+        
+        # Fallback to xterm
+        return ['xterm', '-title', title, '-e', 'bash', '-c', f'{cmd_args}; exec bash']
+    
+    def _is_windows_terminal_available(self) -> bool:
+        """Check if Windows Terminal is available."""
+        try:
+            result = subprocess.run(['wt.exe', '--help'], 
+                                  capture_output=True, timeout=2)
+            return result.returncode == 0
+        except:
+            return False
+    
+    def _is_command_available(self, command: str) -> bool:
+        """Check if a command is available in PATH."""
+        try:
+            result = subprocess.run(['which', command], 
+                                  capture_output=True, timeout=2)
+            return result.returncode == 0
+        except:
+            return False
+    
+    def _start_monitoring(self, tool_name: str):
+        """Start monitoring thread for a process."""
+        def monitor_process():
+            process_info = self.processes[tool_name]
+            process = process_info['process']
+            
+            while process_info['status'] == 'running':
+                try:
+                    # Check if process is still alive
+                    if process.poll() is not None:
+                        process_info['status'] = 'terminated'
+                        process_info['end_time'] = time.time()
+                        self.logger.info(f"Process {tool_name} terminated (exit code: {process.returncode})")
+                        break
+                    
+                    # Read output
+                    try:
+                        # Non-blocking read
+                        if process.stdout.readable():
+                            line = process.stdout.readline()
+                            if line:
+                                process_info['output_buffer'].append(line.strip())
+                                self.logger.debug(f"{tool_name} output: {line.strip()}")
+                        
+                        if process.stderr.readable():
+                            line = process.stderr.readline()
+                            if line:
+                                process_info['error_buffer'].append(line.strip())
+                                self.logger.debug(f"{tool_name} error: {line.strip()}")
+                    
+                    except:
+                        pass  # Non-blocking read may fail
+                    
+                    time.sleep(0.1)  # Small delay to prevent busy waiting
+                    
+                except Exception as e:
+                    self.logger.error(f"Error monitoring {tool_name}: {e}")
+                    break
+        
+        # Start monitoring thread
+        monitor_thread = threading.Thread(target=monitor_process, daemon=True)
+        monitor_thread.start()
+        self.monitoring_threads[tool_name] = monitor_thread
+    
+    def get_process_status(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get status information for a process.
+        
+        Args:
+            tool_name: Name of the process
+            
+        Returns:
+            Status dictionary or None if not found
+        """
+        if tool_name not in self.processes:
+            return None
+        
+        process_info = self.processes[tool_name]
+        process = process_info['process']
+        
+        status = {
+            'name': tool_name,
+            'pid': process.pid if process.poll() is None else None,
+            'status': process_info['status'],
+            'start_time': process_info['start_time'],
+            'end_time': process_info.get('end_time'),
+            'executable': process_info['executable'],
+            'title': process_info['title'],
+            'output_lines': len(process_info['output_buffer']),
+            'error_lines': len(process_info['error_buffer']),
+            'is_running': process.poll() is None
+        }
+        
+        return status
+    
+    def kill_process(self, tool_name: str, force: bool = False) -> bool:
+        """
+        Kill a running process.
+        
+        Args:
+            tool_name: Name of the process
+            force: Whether to force kill (SIGKILL)
+            
+        Returns:
+            True if killed successfully, False otherwise
+        """
+        try:
+            if tool_name not in self.processes:
+                self.logger.error(f"Process {tool_name} not found")
+                return False
+            
+            process_info = self.processes[tool_name]
+            process = process_info['process']
+            
+            if process.poll() is not None:
+                self.logger.warning(f"Process {tool_name} is already terminated")
+                return True
+            
+            self.logger.info(f"Killing process {tool_name} (PID: {process.pid})")
+            
+            if force:
+                process.kill()
+            else:
+                process.terminate()
+            
+            # Wait for process to terminate
+            try:
+                process.wait(timeout=5)
+                process_info['status'] = 'killed'
+                process_info['end_time'] = time.time()
+                self.logger.info(f"Process {tool_name} killed successfully")
+                return True
+            except subprocess.TimeoutExpired:
+                self.logger.warning(f"Process {tool_name} did not terminate, force killing")
+                process.kill()
+                process_info['status'] = 'force_killed'
+                process_info['end_time'] = time.time()
+                return True
+                
+        except Exception as e:
+            self.logger.error(f"Error killing process {tool_name}: {e}")
+            return False
+    
+    def send_command(self, tool_name: str, command: str) -> bool:
+        """
+        Send a command to a running process.
+        
+        Args:
+            tool_name: Name of the process
+            command: Command to send
+            
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        try:
+            if tool_name not in self.processes:
+                self.logger.error(f"Process {tool_name} not found")
+                return False
+            
+            process_info = self.processes[tool_name]
+            process = process_info['process']
+            
+            if process.poll() is not None:
+                self.logger.error(f"Process {tool_name} is not running")
+                return False
+            
+            process.stdin.write(command + '\n')
+            process.stdin.flush()
+            
+            self.logger.info(f"Sent command to {tool_name}: {command}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Error sending command to {tool_name}: {e}")
+            return False
+    
+    def get_output(self, tool_name: str, lines: int = 10) -> List[str]:
+        """
+        Get recent output from a process.
+        
+        Args:
+            tool_name: Name of the process
+            lines: Number of recent lines to return
+            
+        Returns:
+            List of output lines
+        """
+        if tool_name not in self.processes:
+            return []
+        
+        output_buffer = self.processes[tool_name]['output_buffer']
+        return output_buffer[-lines:] if lines > 0 else output_buffer
+    
+    def get_errors(self, tool_name: str, lines: int = 10) -> List[str]:
+        """
+        Get recent errors from a process.
+        
+        Args:
+            tool_name: Name of the process
+            lines: Number of recent lines to return
+            
+        Returns:
+            List of error lines
+        """
+        if tool_name not in self.processes:
+            return []
+        
+        error_buffer = self.processes[tool_name]['error_buffer']
+        return error_buffer[-lines:] if lines > 0 else error_buffer
+    
+    def list_processes(self) -> List[Dict[str, Any]]:
+        """
+        List all managed processes.
+        
+        Returns:
+            List of process status dictionaries
+        """
+        return [self.get_process_status(name) for name in self.processes.keys()]
+    
+    def cleanup(self):
+        """Cleanup all managed processes."""
+        for tool_name in list(self.processes.keys()):
+            self.kill_process(tool_name, force=True)
+        
+        self.processes.clear()
+        self.monitoring_threads.clear()
+
+
 class XilinxJTAGInterface:
     """
     Main class for interfacing with Xilinx JTAG devices.
@@ -95,6 +444,7 @@ class XilinxJTAGInterface:
         self.process: Optional[subprocess.Popen] = None
         self.connected_devices: List[JTAGDevice] = []
         self.is_connected = False
+        self.terminal_manager = TerminalProcessManager(self.logger)
         
         # Set up logging
         if self.config.verbose_logging:
@@ -250,6 +600,138 @@ class XilinxJTAGInterface:
         except Exception as e:
             raise XilinxJTAGError(f"Failed to execute command '{command}': {e}")
     
+    def launch_in_separate_terminal(self, tool_name: str = None, args: List[str] = None) -> bool:
+        """
+        Launch the JTAG tool in a separate terminal window.
+        
+        Args:
+            tool_name: Name identifier for the process (defaults to interface type)
+            args: Additional command line arguments
+            
+        Returns:
+            True if launched successfully, False otherwise
+        """
+        try:
+            if tool_name is None:
+                tool_name = f"{self.config.interface_type.value}_terminal"
+            
+            if args is None:
+                args = []
+            
+            # Find the executable
+            executable_path = self._find_executable()
+            
+            # Create title
+            title = f"Xilinx {self.config.interface_type.value.upper()} - JTAG Interface"
+            
+            # Launch in separate terminal
+            success = self.terminal_manager.launch_in_separate_terminal(
+                tool_name, executable_path, args, title
+            )
+            
+            if success:
+                self.logger.info(f"Launched {self.config.interface_type.value} in separate terminal")
+                return True
+            else:
+                self.logger.error(f"Failed to launch {self.config.interface_type.value} in separate terminal")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error launching tool in separate terminal: {e}")
+            return False
+    
+    def get_terminal_process_status(self, tool_name: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Get status of the terminal process.
+        
+        Args:
+            tool_name: Name of the process (defaults to interface type)
+            
+        Returns:
+            Status dictionary or None if not found
+        """
+        if tool_name is None:
+            tool_name = f"{self.config.interface_type.value}_terminal"
+        
+        return self.terminal_manager.get_process_status(tool_name)
+    
+    def kill_terminal_process(self, tool_name: str = None, force: bool = False) -> bool:
+        """
+        Kill the terminal process.
+        
+        Args:
+            tool_name: Name of the process (defaults to interface type)
+            force: Whether to force kill
+            
+        Returns:
+            True if killed successfully, False otherwise
+        """
+        if tool_name is None:
+            tool_name = f"{self.config.interface_type.value}_terminal"
+        
+        return self.terminal_manager.kill_process(tool_name, force)
+    
+    def send_terminal_command(self, command: str, tool_name: str = None) -> bool:
+        """
+        Send a command to the terminal process.
+        
+        Args:
+            command: Command to send
+            tool_name: Name of the process (defaults to interface type)
+            
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        if tool_name is None:
+            tool_name = f"{self.config.interface_type.value}_terminal"
+        
+        return self.terminal_manager.send_command(tool_name, command)
+    
+    def get_terminal_output(self, tool_name: str = None, lines: int = 10) -> List[str]:
+        """
+        Get recent output from the terminal process.
+        
+        Args:
+            tool_name: Name of the process (defaults to interface type)
+            lines: Number of recent lines to return
+            
+        Returns:
+            List of output lines
+        """
+        if tool_name is None:
+            tool_name = f"{self.config.interface_type.value}_terminal"
+        
+        return self.terminal_manager.get_output(tool_name, lines)
+    
+    def get_terminal_errors(self, tool_name: str = None, lines: int = 10) -> List[str]:
+        """
+        Get recent errors from the terminal process.
+        
+        Args:
+            tool_name: Name of the process (defaults to interface type)
+            lines: Number of recent lines to return
+            
+        Returns:
+            List of error lines
+        """
+        if tool_name is None:
+            tool_name = f"{self.config.interface_type.value}_terminal"
+        
+        return self.terminal_manager.get_errors(tool_name, lines)
+    
+    def list_terminal_processes(self) -> List[Dict[str, Any]]:
+        """
+        List all managed terminal processes.
+        
+        Returns:
+            List of process status dictionaries
+        """
+        return self.terminal_manager.list_processes()
+    
+    def cleanup_terminal_processes(self):
+        """Cleanup all terminal processes."""
+        self.terminal_manager.cleanup()
+    
     def connect(self, tool_paths_config: Optional[Dict[str, List[str]]] = None) -> bool:
         """
         Connect to the JTAG console.
@@ -311,6 +793,10 @@ class XilinxJTAGInterface:
                 self.process = None
                 self.is_connected = False
                 self.connected_devices.clear()
+                
+                # Cleanup terminal processes
+                self.cleanup_terminal_processes()
+                
                 self.logger.info("Disconnected from JTAG console")
     
     def scan_devices(self) -> List[JTAGDevice]:

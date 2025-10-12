@@ -275,13 +275,14 @@ class XilinxToolsManager:
             self.logger.error(f"Error generating boot image: {e}")
             return False
     
-    def generate_vivado_bitstream(self, project_name: str, output_dir: Optional[str] = None) -> Optional[str]:
+    def generate_vivado_bitstream(self, project_name: str, output_dir: Optional[str] = None, custom_tcl: Optional[str] = None) -> Optional[str]:
         """
         Generate bitstream for a Vivado project.
         
         Args:
             project_name: Name of the project
             output_dir: Output directory for bitstream
+            custom_tcl: Path to custom TCL script for bitstream generation
             
         Returns:
             Path to generated bitstream or None if failed
@@ -294,8 +295,20 @@ class XilinxToolsManager:
             project_info = self.vivado_projects[project_name]
             project_manager = project_info['manager']
             
+            # Check if custom TCL is enabled in config
+            project_config = project_info.get('config', {})
+            tcl_script_path = None
+            
+            if custom_tcl:
+                tcl_script_path = custom_tcl
+            elif project_config.get('custom_tcl_enabled', False):
+                tcl_scripts = project_config.get('tcl_scripts', {})
+                tcl_script_path = tcl_scripts.get('bitstream_generation')
+                if tcl_script_path:
+                    self.logger.info(f"Using configured TCL script: {tcl_script_path}")
+            
             # Generate bitstream
-            bitstream_path = project_manager.generate_bitstream(output_dir)
+            bitstream_path = project_manager.generate_bitstream(output_dir, tcl_script_path)
             
             if bitstream_path:
                 self.logger.info(f"Bitstream generated: {bitstream_path}")
@@ -307,6 +320,56 @@ class XilinxToolsManager:
         except Exception as e:
             self.logger.error(f"Error generating bitstream for {project_name}: {e}")
             return None
+    
+    def run_vivado_tcl_script(self, project_name: str, tcl_script_path: str, script_type: str = "custom", args: Optional[List[str]] = None) -> bool:
+        """
+        Run a TCL script for a Vivado project.
+        
+        Args:
+            project_name: Name of the project
+            tcl_script_path: Path to TCL script (or script type if using config)
+            script_type: Type of script (bitstream_generation, programming, debug, custom)
+            args: Optional arguments to pass to the script
+            
+        Returns:
+            True if script executed successfully, False otherwise
+        """
+        try:
+            if project_name not in self.vivado_projects:
+                self.logger.error(f"Project not found: {project_name}")
+                return False
+            
+            project_info = self.vivado_projects[project_name]
+            project_manager = project_info['manager']
+            
+            # Determine actual TCL script path
+            actual_tcl_path = tcl_script_path
+            
+            # If script_type is not "custom", try to get from config
+            if script_type != "custom":
+                project_config = project_info.get('config', {})
+                if project_config and project_config.get('custom_tcl_enabled', False):
+                    tcl_scripts = project_config.get('tcl_scripts', {})
+                    config_tcl_path = tcl_scripts.get(script_type)
+                    if config_tcl_path and os.path.exists(config_tcl_path):
+                        actual_tcl_path = config_tcl_path
+                        self.logger.info(f"Using configured TCL script for {script_type}: {actual_tcl_path}")
+                    else:
+                        self.logger.warning(f"Configured TCL script for {script_type} not found: {config_tcl_path}")
+            
+            # Run the TCL script
+            success = project_manager.run_tcl_script(actual_tcl_path, args)
+            
+            if success:
+                self.logger.info(f"TCL script executed successfully: {actual_tcl_path}")
+            else:
+                self.logger.error(f"TCL script failed: {actual_tcl_path}")
+            
+            return success
+            
+        except Exception as e:
+            self.logger.error(f"Error running TCL script: {e}")
+            return False
     
     def associate_elf_with_project(self, project_name: str, elf_path: str) -> bool:
         """

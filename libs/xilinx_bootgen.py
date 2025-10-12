@@ -404,12 +404,13 @@ class VivadoProjectManager:
             "or specify the Vivado path in configuration."
         )
     
-    def generate_bitstream(self, output_dir: Optional[str] = None) -> Optional[str]:
+    def generate_bitstream(self, output_dir: Optional[str] = None, custom_tcl: Optional[str] = None) -> Optional[str]:
         """
         Generate bitstream for the project.
         
         Args:
             output_dir: Output directory for bitstream
+            custom_tcl: Path to custom TCL script for bitstream generation
             
         Returns:
             Path to generated bitstream file, or None if failed
@@ -418,8 +419,13 @@ class VivadoProjectManager:
             vivado_path = self._find_vivado_executable()
             self.logger.info(f"Using Vivado: {vivado_path}")
             
-            # Create TCL script for bitstream generation
-            tcl_script = f"""
+            # Determine which TCL script to use
+            if custom_tcl and os.path.exists(custom_tcl):
+                self.logger.info(f"Using custom TCL script: {custom_tcl}")
+                tcl_script_path = custom_tcl
+            else:
+                # Create default TCL script for bitstream generation
+                tcl_script = f"""
 # Open project
 open_project {self.project_path}
 # Update compile order
@@ -436,11 +442,11 @@ wait_on_run impl_1
 # Exit
 exit
 """
-            
-            # Write TCL script to temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.tcl', delete=False) as tcl_file:
-                tcl_file.write(tcl_script)
-                tcl_script_path = tcl_file.name
+                
+                # Write TCL script to temporary file
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.tcl', delete=False) as tcl_file:
+                    tcl_file.write(tcl_script)
+                    tcl_script_path = tcl_file.name
             
             try:
                 # Run Vivado with TCL script
@@ -478,6 +484,53 @@ exit
         except Exception as e:
             self.logger.error(f"Error generating bitstream: {e}")
             return None
+    
+    def run_tcl_script(self, tcl_script_path: str, args: Optional[List[str]] = None) -> bool:
+        """
+        Run a custom TCL script in Vivado.
+        
+        Args:
+            tcl_script_path: Path to the TCL script
+            args: Optional arguments to pass to the script
+            
+        Returns:
+            True if script executed successfully, False otherwise
+        """
+        try:
+            if not os.path.exists(tcl_script_path):
+                self.logger.error(f"TCL script not found: {tcl_script_path}")
+                return False
+            
+            vivado_path = self._find_vivado_executable()
+            self.logger.info(f"Running TCL script: {tcl_script_path}")
+            
+            # Build command
+            cmd = [vivado_path, "-mode", "batch", "-source", tcl_script_path]
+            
+            # Add arguments if provided
+            if args:
+                cmd.extend(["-tclargs"] + args)
+            
+            # Run Vivado with TCL script
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+            
+            if result.returncode == 0:
+                self.logger.info("TCL script executed successfully")
+                if result.stdout:
+                    self.logger.debug(f"Vivado output: {result.stdout}")
+                return True
+            else:
+                self.logger.error(f"TCL script failed with return code {result.returncode}")
+                if result.stderr:
+                    self.logger.error(f"Vivado error: {result.stderr}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            self.logger.error("TCL script execution timed out")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error running TCL script: {e}")
+            return False
     
     def associate_elf_file(self, elf_path: str, target_cpu: str = "ps7_cortexa9_0") -> bool:
         """

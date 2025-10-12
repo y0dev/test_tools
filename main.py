@@ -29,6 +29,7 @@ import sys
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 
@@ -632,38 +633,50 @@ def jtag_operations_menu():
         print("-" * 40)
         print("1. Run JTAG Test")
         print("2. JTAG Device Detection")
-        print("3. Generate Boot Image")
-        print("4. Vivado Operations")
-        print("5. Run Comprehensive Demo")
-        print("6. Run JTAG Demo")
-        print("7. Run Integration Demo")
-        print("8. Generate JTAG Config")
-        print("9. Back to Main Menu")
+        print("3. Launch Tool in Separate Terminal")
+        print("4. Monitor Terminal Processes")
+        print("5. Send Command to Terminal")
+        print("6. Kill Terminal Process")
+        print("7. Generate Boot Image")
+        print("8. Vivado Operations")
+        print("9. Run Comprehensive Demo")
+        print("10. Run JTAG Demo")
+        print("11. Run Integration Demo")
+        print("12. Generate JTAG Config")
+        print("13. Back to Main Menu")
         print()
         
         try:
-            choice = input("Select an option (1-9): ").strip()
+            choice = input("Select an option (1-13): ").strip()
             
             if choice == '1':
                 run_jtag_test()
             elif choice == '2':
                 jtag_device_detection()
             elif choice == '3':
-                generate_boot_image()
+                launch_jtag_terminal()
             elif choice == '4':
-                vivado_operations_menu()
+                monitor_jtag_processes()
             elif choice == '5':
-                run_comprehensive_demo()
+                send_jtag_command()
             elif choice == '6':
-                run_jtag_demo()
+                kill_jtag_process()
             elif choice == '7':
-                run_integration_demo()
+                generate_boot_image()
             elif choice == '8':
-                generate_jtag_config()
+                vivado_operations_menu()
             elif choice == '9':
+                run_comprehensive_demo()
+            elif choice == '10':
+                run_jtag_demo()
+            elif choice == '11':
+                run_integration_demo()
+            elif choice == '12':
+                generate_jtag_config()
+            elif choice == '13':
                 break
             else:
-                print("❌ Invalid choice. Please select 1-9.")
+                print("❌ Invalid choice. Please select 1-13.")
                 
         except KeyboardInterrupt:
             break
@@ -1555,6 +1568,246 @@ def help_menu():
             print(f"❌ Error: {e}")
 
 
+def launch_jtag_terminal():
+    """Launch JTAG tool in separate terminal."""
+    try:
+        from libs.xilinx_jtag import XilinxJTAGInterface, JTAGConfig, load_jtag_config
+        
+        # Load configuration
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        config = load_jtag_config(config_file)
+        jtag = XilinxJTAGInterface(config)
+        
+        # Get tool selection
+        print("Select JTAG Tool:")
+        print("1. anxsct (AMD Xilinx System Control Tool)")
+        print("2. xsdb (Xilinx Software Debugger)")
+        
+        tool_choice = input("Select tool (1-2): ").strip()
+        
+        if tool_choice == '1':
+            tool_name = "anxsct_terminal"
+            args = []
+        elif tool_choice == '2':
+            tool_name = "xsdb_terminal"
+            args = []
+        else:
+            print("❌ Invalid tool selection")
+            return
+        
+        # Launch in separate terminal
+        print(f"Launching {tool_name} in separate terminal...")
+        success = jtag.launch_in_separate_terminal(tool_name, args)
+        
+        if success:
+            print(f"✅ {tool_name} launched successfully")
+            print("The tool is now running in a separate terminal window.")
+            print("Use 'Monitor Terminal Processes' to check its status.")
+        else:
+            print(f"❌ Failed to launch {tool_name}")
+        
+    except ImportError:
+        print("❌ Xilinx JTAG interface not available")
+    except Exception as e:
+        print(f"❌ Error launching JTAG terminal: {e}")
+
+
+def monitor_jtag_processes():
+    """Monitor JTAG terminal processes."""
+    try:
+        from libs.xilinx_jtag import XilinxJTAGInterface, JTAGConfig, load_jtag_config
+        
+        # Load configuration
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        config = load_jtag_config(config_file)
+        jtag = XilinxJTAGInterface(config)
+        
+        # Get list of processes
+        processes = jtag.list_terminal_processes()
+        
+        if not processes:
+            print("No JTAG terminal processes found.")
+            print("Use 'Launch Tool in Separate Terminal' to start a process.")
+            return
+        
+        print("JTAG Terminal Processes:")
+        print("=" * 60)
+        
+        for i, process in enumerate(processes):
+            if process:
+                status_icon = "🟢" if process['is_running'] else "🔴"
+                print(f"\n{i+1}. {status_icon} {process['name']}")
+                print(f"   PID: {process['pid'] or 'N/A'}")
+                print(f"   Status: {process['status']}")
+                print(f"   Executable: {process['executable']}")
+                print(f"   Title: {process['title']}")
+                print(f"   Output Lines: {process['output_lines']}")
+                print(f"   Error Lines: {process['error_lines']}")
+                
+                if process['start_time']:
+                    runtime = time.time() - process['start_time']
+                    print(f"   Runtime: {runtime:.1f} seconds")
+        
+        print(f"\nTotal processes: {len([p for p in processes if p])}")
+        
+        # Show recent output for running processes
+        running_processes = [p for p in processes if p and p['is_running']]
+        if running_processes:
+            print("\nRecent Output:")
+            print("-" * 40)
+            
+            for process in running_processes:
+                tool_name = process['name']
+                output = jtag.get_terminal_output(tool_name, 5)
+                errors = jtag.get_terminal_errors(tool_name, 5)
+                
+                if output:
+                    print(f"\n{tool_name} Output:")
+                    for line in output:
+                        print(f"  {line}")
+                
+                if errors:
+                    print(f"\n{tool_name} Errors:")
+                    for line in errors:
+                        print(f"  ❌ {line}")
+        
+    except ImportError:
+        print("❌ Xilinx JTAG interface not available")
+    except Exception as e:
+        print(f"❌ Error monitoring processes: {e}")
+
+
+def send_jtag_command():
+    """Send command to JTAG terminal process."""
+    try:
+        from libs.xilinx_jtag import XilinxJTAGInterface, JTAGConfig, load_jtag_config
+        
+        # Load configuration
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        config = load_jtag_config(config_file)
+        jtag = XilinxJTAGInterface(config)
+        
+        # Get list of running processes
+        processes = jtag.list_terminal_processes()
+        running_processes = [p for p in processes if p and p['is_running']]
+        
+        if not running_processes:
+            print("No running JTAG terminal processes found.")
+            print("Use 'Launch Tool in Separate Terminal' to start a process.")
+            return
+        
+        print("Running JTAG Terminal Processes:")
+        for i, process in enumerate(running_processes):
+            print(f"  {i+1}. {process['name']} (PID: {process['pid']})")
+        
+        # Get process selection
+        choice = input(f"Select process (1-{len(running_processes)}): ").strip()
+        try:
+            process_index = int(choice) - 1
+            if 0 <= process_index < len(running_processes):
+                selected_process = running_processes[process_index]
+                tool_name = selected_process['name']
+            else:
+                print("❌ Invalid process selection")
+                return
+        except ValueError:
+            print("❌ Invalid input")
+            return
+        
+        # Get command
+        command = input("Enter command to send: ").strip()
+        if not command:
+            print("❌ No command specified")
+            return
+        
+        # Send command
+        success = jtag.send_terminal_command(command, tool_name)
+        
+        if success:
+            print(f"✅ Command sent to {tool_name}: {command}")
+            print("Check the terminal window or use 'Monitor Terminal Processes' to see output.")
+        else:
+            print(f"❌ Failed to send command to {tool_name}")
+        
+    except ImportError:
+        print("❌ Xilinx JTAG interface not available")
+    except Exception as e:
+        print(f"❌ Error sending command: {e}")
+
+
+def kill_jtag_process():
+    """Kill JTAG terminal process."""
+    try:
+        from libs.xilinx_jtag import XilinxJTAGInterface, JTAGConfig, load_jtag_config
+        
+        # Load configuration
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        config = load_jtag_config(config_file)
+        jtag = XilinxJTAGInterface(config)
+        
+        # Get list of processes
+        processes = jtag.list_terminal_processes()
+        all_processes = [p for p in processes if p]
+        
+        if not all_processes:
+            print("No JTAG terminal processes found.")
+            return
+        
+        print("JTAG Terminal Processes:")
+        for i, process in enumerate(all_processes):
+            status_icon = "🟢" if process['is_running'] else "🔴"
+            print(f"  {i+1}. {status_icon} {process['name']} - {process['status']}")
+        
+        # Get process selection
+        choice = input(f"Select process to kill (1-{len(all_processes)}): ").strip()
+        try:
+            process_index = int(choice) - 1
+            if 0 <= process_index < len(all_processes):
+                selected_process = all_processes[process_index]
+                tool_name = selected_process['name']
+            else:
+                print("❌ Invalid process selection")
+                return
+        except ValueError:
+            print("❌ Invalid input")
+            return
+        
+        # Confirm kill
+        confirm = input(f"Are you sure you want to kill {tool_name}? (y/n): ").strip().lower()
+        if confirm not in ['y', 'yes']:
+            print("Operation cancelled")
+            return
+        
+        # Ask for force kill
+        force = input("Force kill? (y/n): ").strip().lower()
+        force_kill = force in ['y', 'yes']
+        
+        # Kill process
+        success = jtag.kill_terminal_process(tool_name, force_kill)
+        
+        if success:
+            print(f"✅ Process {tool_name} killed successfully")
+        else:
+            print(f"❌ Failed to kill process {tool_name}")
+        
+    except ImportError:
+        print("❌ Xilinx JTAG interface not available")
+    except Exception as e:
+        print(f"❌ Error killing process: {e}")
+
+
 def run_jtag_test():
     """Run JTAG-enabled test."""
     try:
@@ -1708,26 +1961,29 @@ def vivado_operations_menu():
         print("-" * 40)
         print("1. Generate Bitstream")
         print("2. Associate ELF File")
-        print("3. Add Project")
-        print("4. List Projects")
-        print("5. Back to JTAG Menu")
+        print("3. Run TCL Script")
+        print("4. Add Project")
+        print("5. List Projects")
+        print("6. Back to JTAG Menu")
         print()
         
         try:
-            choice = input("Select an option (1-5): ").strip()
+            choice = input("Select an option (1-6): ").strip()
             
             if choice == '1':
                 generate_vivado_bitstream()
             elif choice == '2':
                 associate_elf_file()
             elif choice == '3':
-                add_vivado_project()
+                run_vivado_tcl_script()
             elif choice == '4':
-                list_vivado_projects()
+                add_vivado_project()
             elif choice == '5':
+                list_vivado_projects()
+            elif choice == '6':
                 break
             else:
-                print("❌ Invalid choice. Please select 1-5.")
+                print("❌ Invalid choice. Please select 1-6.")
                 
         except KeyboardInterrupt:
             break
@@ -1779,23 +2035,158 @@ def generate_vivado_bitstream():
                     project.get('target_cpu', 'ps7_cortexa9_0')
                 )
                 
-                # Generate bitstream
-                print(f"Generating bitstream for project: {project_name}")
-                bitstream_path = manager.generate_vivado_bitstream(project_name)
-                
-                if bitstream_path:
-                    print(f"✅ Bitstream generated: {bitstream_path}")
-                else:
-                    print("❌ Failed to generate bitstream")
-            else:
-                print("❌ Invalid project selection")
-        except ValueError:
-            print("❌ Invalid input")
+        # Ask for custom TCL script
+        custom_tcl = input("Enter custom TCL script path (or press Enter to use default/configured): ").strip()
+        if not custom_tcl:
+            custom_tcl = None
+        
+        # Ask for output directory
+        output_dir = input("Enter output directory (or press Enter for default): ").strip()
+        if not output_dir:
+            output_dir = None
+        
+        # Generate bitstream
+        print(f"Generating bitstream for project: {project_name}")
+        bitstream_path = manager.generate_vivado_bitstream(project_name, output_dir, custom_tcl)
+        
+        if bitstream_path:
+            print(f"✅ Bitstream generated: {bitstream_path}")
+        else:
+            print("❌ Failed to generate bitstream")
         
     except ImportError:
         print("❌ Xilinx tools manager not available")
     except Exception as e:
         print(f"❌ Error generating bitstream: {e}")
+
+
+def run_vivado_tcl_script():
+    """Run a TCL script for Vivado project."""
+    try:
+        from libs.xilinx_tools_manager import XilinxToolsManager, load_xilinx_tools_config
+        
+        # Load configuration
+        config = load_xilinx_tools_config("config/xilinx_jtag_config.json")
+        manager = XilinxToolsManager(config)
+        
+        # List available projects
+        projects = manager.list_vivado_projects()
+        if not projects:
+            print("❌ No Vivado projects found")
+            return
+        
+        print("Available Vivado Projects:")
+        for i, project in enumerate(projects):
+            print(f"  {i+1}. {project}")
+        
+        # Get project selection
+        choice = input(f"Select project (1-{len(projects)}): ").strip()
+        try:
+            project_index = int(choice) - 1
+            if 0 <= project_index < len(projects):
+                project_name = projects[project_index]
+            else:
+                print("❌ Invalid project selection")
+                return
+        except ValueError:
+            print("❌ Invalid input")
+            return
+        
+        # Get TCL script options
+        print("\nTCL Script Options:")
+        print("1. Use configured script (bitstream_generation, programming, debug)")
+        print("2. Specify custom TCL file path")
+        print("3. Enter TCL commands directly")
+        
+        script_choice = input("Select option (1-3): ").strip()
+        
+        if script_choice == '1':
+            # Use configured script
+            print("Available script types:")
+            print("1. bitstream_generation")
+            print("2. programming") 
+            print("3. debug")
+            
+            type_choice = input("Select script type (1-3): ").strip()
+            script_types = ['bitstream_generation', 'programming', 'debug']
+            
+            try:
+                type_index = int(type_choice) - 1
+                if 0 <= type_index < len(script_types):
+                    script_type = script_types[type_index]
+                    tcl_path = f"configured_{script_type}"  # Placeholder for configured script
+                else:
+                    print("❌ Invalid script type")
+                    return
+            except ValueError:
+                print("❌ Invalid input")
+                return
+                
+        elif script_choice == '2':
+            # Custom TCL file
+            tcl_path = input("Enter TCL script file path: ").strip()
+            if not tcl_path:
+                print("❌ No TCL script path specified")
+                return
+            script_type = "custom"
+            
+        elif script_choice == '3':
+            # Direct TCL commands
+            print("Enter TCL commands (press Enter twice to finish):")
+            tcl_commands = []
+            while True:
+                line = input()
+                if line == "" and tcl_commands and tcl_commands[-1] == "":
+                    break
+                tcl_commands.append(line)
+            
+            # Remove empty lines
+            tcl_commands = [cmd for cmd in tcl_commands if cmd.strip()]
+            
+            if not tcl_commands:
+                print("❌ No TCL commands provided")
+                return
+            
+            # Create temporary TCL file
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.tcl', delete=False) as tcl_file:
+                tcl_file.write('\n'.join(tcl_commands))
+                tcl_path = tcl_file.name
+            
+            script_type = "custom"
+            print(f"Created temporary TCL file: {tcl_path}")
+            
+        else:
+            print("❌ Invalid choice")
+            return
+        
+        # Get optional arguments
+        args_input = input("Enter script arguments (space-separated, or press Enter for none): ").strip()
+        args = args_input.split() if args_input else None
+        
+        # Run the TCL script
+        print(f"Running TCL script for project: {project_name}")
+        if script_choice == '1':
+            success = manager.run_vivado_tcl_script(project_name, tcl_path, script_type, args)
+        else:
+            success = manager.run_vivado_tcl_script(project_name, tcl_path, "custom", args)
+        
+        if success:
+            print("✅ TCL script executed successfully")
+        else:
+            print("❌ TCL script execution failed")
+        
+        # Cleanup temporary file if created
+        if script_choice == '3' and 'tempfile' in locals():
+            try:
+                os.unlink(tcl_path)
+            except:
+                pass
+        
+    except ImportError:
+        print("❌ Xilinx tools manager not available")
+    except Exception as e:
+        print(f"❌ Error running TCL script: {e}")
 
 
 def associate_elf_file():

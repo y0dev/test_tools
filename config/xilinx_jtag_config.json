@@ -87,7 +87,13 @@
       "name": "example_project",
       "project_path": "./projects/example_project.xpr",
       "target_cpu": "ps7_cortexa9_0",
-      "bitstream_output_dir": "./bitstreams"
+      "bitstream_output_dir": "./bitstreams",
+      "tcl_scripts": {
+        "bitstream_generation": "./scripts/generate_bitstream.tcl",
+        "programming": "./scripts/program_device.tcl",
+        "debug": "./scripts/debug_session.tcl"
+      },
+      "custom_tcl_enabled": true
     }
   ],
   "devices": [
