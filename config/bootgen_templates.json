@@ -1,0 +1,324 @@
+{
+  "bootgen_templates": {
+    "zynq_fsbl": {
+      "description": "Simple Zynq-7000 FSBL boot image",
+      "output_file": "zynq_fsbl_boot.bin",
+      "boot_mode": "sd",
+      "arch": "zynq",
+      "boot_device": "sd0",
+      "verbose": true,
+      "components": [
+        {
+          "name": "fsbl",
+          "type": "fsbl",
+          "file_path": "./boot_images/fsbl.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "bitstream",
+          "type": "bitstream",
+          "file_path": "./bitstreams/zynq_design.bit",
+          "load_address": null,
+          "execution_address": null
+        }
+      ]
+    },
+    "zynqmp_complete": {
+      "description": "Complete ZynqMP boot image with all components",
+      "output_file": "zynqmp_complete_boot.bin",
+      "boot_mode": "sd",
+      "arch": "zynqmp",
+      "boot_device": "sd0",
+      "verbose": true,
+      "components": [
+        {
+          "name": "fsbl",
+          "type": "fsbl",
+          "file_path": "./boot_images/fsbl.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "pmufw",
+          "type": "pmufw",
+          "file_path": "./boot_images/pmufw.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "bitstream",
+          "type": "bitstream",
+          "file_path": "./bitstreams/zynqmp_design.bit",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "atf",
+          "type": "atf",
+          "file_path": "./boot_images/bl31.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "uboot",
+          "type": "uboot",
+          "file_path": "./boot_images/u-boot.elf",
+          "load_address": null,
+          "execution_address": null
+        }
+      ]
+    },
+    "zynqmp_minimal": {
+      "description": "Minimal ZynqMP boot image (FSBL + Bitstream only)",
+      "output_file": "zynqmp_minimal_boot.bin",
+      "boot_mode": "sd",
+      "arch": "zynqmp",
+      "boot_device": "sd0",
+      "verbose": true,
+      "components": [
+        {
+          "name": "fsbl",
+          "type": "fsbl",
+          "file_path": "./boot_images/fsbl.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "bitstream",
+          "type": "bitstream",
+          "file_path": "./bitstreams/zynqmp_design.bit",
+          "load_address": null,
+          "execution_address": null
+        }
+      ]
+    },
+    "zynqmp_qspi": {
+      "description": "ZynqMP boot image for QSPI flash",
+      "output_file": "zynqmp_qspi_boot.bin",
+      "boot_mode": "qspi",
+      "arch": "zynqmp",
+      "boot_device": "qspi",
+      "verbose": true,
+      "components": [
+        {
+          "name": "fsbl",
+          "type": "fsbl",
+          "file_path": "./boot_images/fsbl.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "pmufw",
+          "type": "pmufw",
+          "file_path": "./boot_images/pmufw.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "bitstream",
+          "type": "bitstream",
+          "file_path": "./bitstreams/zynqmp_design.bit",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "atf",
+          "type": "atf",
+          "file_path": "./boot_images/bl31.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "uboot",
+          "type": "uboot",
+          "file_path": "./boot_images/u-boot.elf",
+          "load_address": null,
+          "execution_address": null
+        }
+      ]
+    },
+    "zynqmp_emmc": {
+      "description": "ZynqMP boot image for eMMC",
+      "output_file": "zynqmp_emmc_boot.bin",
+      "boot_mode": "emmc",
+      "arch": "zynqmp",
+      "boot_device": "emmc",
+      "verbose": true,
+      "components": [
+        {
+          "name": "fsbl",
+          "type": "fsbl",
+          "file_path": "./boot_images/fsbl.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "pmufw",
+          "type": "pmufw",
+          "file_path": "./boot_images/pmufw.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "bitstream",
+          "type": "bitstream",
+          "file_path": "./bitstreams/zynqmp_design.bit",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "atf",
+          "type": "atf",
+          "file_path": "./boot_images/bl31.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "uboot",
+          "type": "uboot",
+          "file_path": "./boot_images/u-boot.elf",
+          "load_address": null,
+          "execution_address": null
+        }
+      ]
+    },
+    "zynqmp_with_app": {
+      "description": "ZynqMP boot image with application ELF",
+      "output_file": "zynqmp_app_boot.bin",
+      "boot_mode": "sd",
+      "arch": "zynqmp",
+      "boot_device": "sd0",
+      "verbose": true,
+      "components": [
+        {
+          "name": "fsbl",
+          "type": "fsbl",
+          "file_path": "./boot_images/fsbl.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "pmufw",
+          "type": "pmufw",
+          "file_path": "./boot_images/pmufw.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "bitstream",
+          "type": "bitstream",
+          "file_path": "./bitstreams/zynqmp_design.bit",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "atf",
+          "type": "atf",
+          "file_path": "./boot_images/bl31.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "uboot",
+          "type": "uboot",
+          "file_path": "./boot_images/u-boot.elf",
+          "load_address": null,
+          "execution_address": null
+        },
+        {
+          "name": "application",
+          "type": "elf",
+          "file_path": "./boot_images/application.elf",
+          "load_address": "0x10000000",
+          "execution_address": "0x10000000"
+        }
+      ]
+    }
+  },
+  "vivado_project_templates": {
+    "zynq_7000": {
+      "description": "Zynq-7000 SoC project template",
+      "target_cpu": "ps7_cortexa9_0",
+      "part": "xc7z020clg400-1",
+      "board": "digilentinc.com:zybo:part0:1.0"
+    },
+    "zynqmp": {
+      "description": "ZynqMP SoC project template",
+      "target_cpu": "psu_cortexa53_0",
+      "part": "xczu9eg-ffvb1156-2-e",
+      "board": "xilinx.com:zcu102:part0:1.0"
+    },
+    "artix_7": {
+      "description": "Artix-7 FPGA project template",
+      "target_cpu": null,
+      "part": "xc7a35tcsg324-1",
+      "board": "digilentinc.com:arty:part0:1.0"
+    }
+  },
+  "file_structure": {
+    "boot_images": {
+      "description": "Directory containing boot image components",
+      "files": [
+        "fsbl.elf",
+        "pmufw.elf",
+        "bl31.elf",
+        "u-boot.elf",
+        "application.elf"
+      ]
+    },
+    "bitstreams": {
+      "description": "Directory containing bitstream files",
+      "files": [
+        "zynq_design.bit",
+        "zynqmp_design.bit",
+        "artix_design.bit"
+      ]
+    },
+    "projects": {
+      "description": "Directory containing Vivado projects",
+      "files": [
+        "zynq_project.xpr",
+        "zynqmp_project.xpr",
+        "artix_project.xpr"
+      ]
+    },
+    "output": {
+      "description": "Directory for generated boot images",
+      "files": [
+        "zynq_fsbl_boot.bin",
+        "zynqmp_complete_boot.bin",
+        "zynqmp_minimal_boot.bin"
+      ]
+    }
+  },
+  "usage_examples": {
+    "generate_zynq_boot": {
+      "description": "Generate boot image for Zynq-7000",
+      "template": "zynq_fsbl",
+      "required_files": [
+        "./boot_images/fsbl.elf",
+        "./bitstreams/zynq_design.bit"
+      ]
+    },
+    "generate_zynqmp_boot": {
+      "description": "Generate complete boot image for ZynqMP",
+      "template": "zynqmp_complete",
+      "required_files": [
+        "./boot_images/fsbl.elf",
+        "./boot_images/pmufw.elf",
+        "./bitstreams/zynqmp_design.bit",
+        "./boot_images/bl31.elf",
+        "./boot_images/u-boot.elf"
+      ]
+    },
+    "generate_minimal_boot": {
+      "description": "Generate minimal boot image for ZynqMP",
+      "template": "zynqmp_minimal",
+      "required_files": [
+        "./boot_images/fsbl.elf",
+        "./bitstreams/zynqmp_design.bit"
+      ]
+    }
+  }
+}

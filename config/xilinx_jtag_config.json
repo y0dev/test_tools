@@ -1,0 +1,171 @@
+{
+  "xilinx_tools": {
+    "tool_paths": {
+      "anxsct": [
+        "C:\\Xilinx\\Vitis\\2023.2\\bin\\anxsct.exe",
+        "C:\\Xilinx\\Vitis\\2023.1\\bin\\anxsct.exe",
+        "C:\\Xilinx\\Vitis\\2022.2\\bin\\anxsct.exe",
+        "anxsct"
+      ],
+      "xsdb": [
+        "C:\\Xilinx\\Vitis\\2023.2\\bin\\xsdb.exe",
+        "C:\\Xilinx\\SDK\\2019.1\\bin\\xsdb.exe",
+        "C:\\Xilinx\\Vivado\\2023.2\\bin\\xsdb.exe",
+        "xsdb"
+      ],
+      "bootgen": [
+        "C:\\Xilinx\\Vitis\\2023.2\\bin\\bootgen.exe",
+        "C:\\Xilinx\\SDK\\2019.1\\bin\\bootgen.exe",
+        "C:\\Xilinx\\Vivado\\2023.2\\bin\\bootgen.exe",
+        "bootgen"
+      ],
+      "vivado": [
+        "C:\\Xilinx\\Vivado\\2023.2\\bin\\vivado.exe",
+        "C:\\Xilinx\\Vivado\\2023.1\\bin\\vivado.exe",
+        "C:\\Xilinx\\Vivado\\2022.2\\bin\\vivado.exe",
+        "vivado"
+      ]
+    },
+    "default_tool": "anxsct",
+    "auto_detect_paths": true,
+    "preferred_version": "2023.2"
+  },
+  "jtag_config": {
+    "interface": "anxsct",
+    "executable_path": null,
+    "connection_timeout": 30,
+    "command_timeout": 10,
+    "auto_connect": true,
+    "verbose_logging": false
+  },
+  "bootgen_config": {
+    "output_file": "boot.bin",
+    "boot_mode": "sd",
+    "arch": "zynqmp",
+    "boot_device": "sd0",
+    "verbose": true,
+    "components": [
+      {
+        "name": "fsbl",
+        "type": "fsbl",
+        "file_path": "./boot_images/fsbl.elf",
+        "load_address": null,
+        "execution_address": null
+      },
+      {
+        "name": "bitstream",
+        "type": "bitstream",
+        "file_path": "./bitstreams/design.bit",
+        "load_address": null,
+        "execution_address": null
+      },
+      {
+        "name": "pmufw",
+        "type": "pmufw",
+        "file_path": "./boot_images/pmufw.elf",
+        "load_address": null,
+        "execution_address": null
+      },
+      {
+        "name": "atf",
+        "type": "atf",
+        "file_path": "./boot_images/bl31.elf",
+        "load_address": null,
+        "execution_address": null
+      },
+      {
+        "name": "uboot",
+        "type": "uboot",
+        "file_path": "./boot_images/u-boot.elf",
+        "load_address": null,
+        "execution_address": null
+      }
+    ]
+  },
+  "vivado_projects": [
+    {
+      "name": "example_project",
+      "project_path": "./projects/example_project.xpr",
+      "target_cpu": "ps7_cortexa9_0",
+      "bitstream_output_dir": "./bitstreams"
+    }
+  ],
+  "devices": [
+    {
+      "name": "zynq_device",
+      "description": "Zynq-7000 SoC device",
+      "device_index": 0,
+      "bitstream_path": "./bitstreams/zynq_design.bit",
+      "memory_map": {
+        "base_address": "0x40000000",
+        "registers": {
+          "control": "0x40000000",
+          "status": "0x40000004",
+          "data": "0x40000008"
+        }
+      }
+    },
+    {
+      "name": "artix_device",
+      "description": "Artix-7 FPGA device",
+      "device_index": 1,
+      "bitstream_path": "./bitstreams/artix_design.bit",
+      "memory_map": {
+        "base_address": "0x00000000",
+        "registers": {
+          "control": "0x00000000",
+          "status": "0x00000004"
+        }
+      }
+    }
+  ],
+  "operations": {
+    "reset_sequence": [
+      "targets {device_index}",
+      "rst",
+      "wait 1000"
+    ],
+    "program_sequence": [
+      "targets {device_index}",
+      "fpga -f {bitstream_path}",
+      "wait 2000"
+    ],
+    "debug_sequence": [
+      "targets {device_index}",
+      "stop",
+      "step",
+      "continue"
+    ]
+  },
+  "test_patterns": {
+    "device_detection": {
+      "description": "Test JTAG device detection and enumeration",
+      "expected_devices": 2,
+      "timeout": 30
+    },
+    "reset_test": {
+      "description": "Test device reset functionality",
+      "device_index": 0,
+      "timeout": 10
+    },
+    "programming_test": {
+      "description": "Test bitstream programming",
+      "device_index": 0,
+      "bitstream_path": "./test_bitstreams/test.bit",
+      "timeout": 60
+    },
+    "memory_access_test": {
+      "description": "Test memory read/write operations",
+      "device_index": 0,
+      "test_address": "0x40000000",
+      "test_data": "0x12345678",
+      "timeout": 15
+    }
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_file": "./output/logs/jtag_operations.log",
+    "command_logging": true,
+    "response_logging": true
+  }
+}

@@ -477,12 +477,13 @@ def show_main_menu():
         print("1. Run Tests")
         print("2. Configuration Management")
         print("3. Log Analysis")
-        print("4. Help & Documentation")
-        print("5. Exit")
+        print("4. JTAG Operations")
+        print("5. Help & Documentation")
+        print("6. Exit")
         print()
         
         try:
-            choice = input("Select an option (1-5): ").strip()
+            choice = input("Select an option (1-6): ").strip()
             
             if choice == '1':
                 run_tests_menu()
@@ -491,12 +492,14 @@ def show_main_menu():
             elif choice == '3':
                 log_analysis_menu()
             elif choice == '4':
-                help_menu()
+                jtag_operations_menu()
             elif choice == '5':
+                help_menu()
+            elif choice == '6':
                 print("Goodbye!")
                 break
             else:
-                print("❌ Invalid choice. Please select 1-5.")
+                print("❌ Invalid choice. Please select 1-6.")
                 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
@@ -614,6 +617,47 @@ def log_analysis_menu():
             print(f"❌ Error: {e}")
 
 
+def jtag_operations_menu():
+    """Menu for JTAG operations."""
+    while True:
+        print("\n" + "-" * 40)
+        print("JTAG OPERATIONS")
+        print("-" * 40)
+        print("1. Run JTAG Test")
+        print("2. JTAG Device Detection")
+        print("3. Generate Boot Image")
+        print("4. Vivado Operations")
+        print("5. JTAG Demo")
+        print("6. Generate JTAG Config")
+        print("7. Back to Main Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-7): ").strip()
+            
+            if choice == '1':
+                run_jtag_test()
+            elif choice == '2':
+                jtag_device_detection()
+            elif choice == '3':
+                generate_boot_image()
+            elif choice == '4':
+                vivado_operations_menu()
+            elif choice == '5':
+                run_jtag_demo()
+            elif choice == '6':
+                generate_jtag_config()
+            elif choice == '7':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-7.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
 def help_menu():
     """Menu for help and documentation."""
     while True:
@@ -644,6 +688,412 @@ def help_menu():
             break
         except Exception as e:
             print(f"❌ Error: {e}")
+
+
+def run_jtag_test():
+    """Run JTAG-enabled test."""
+    try:
+        from libs.jtag_test_runner import JTAGTestRunner
+        
+        config_file = get_config_file()
+        if not config_file:
+            return
+            
+        print(f"Running JTAG test with config: {config_file}")
+        
+        # Create JTAG test runner
+        runner = JTAGTestRunner(config_file)
+        
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Initialize and run test
+        if not runner.initialize_components():
+            print("❌ Failed to initialize components")
+            return
+        
+        try:
+            # Run JTAG test
+            results = runner.run_jtag_test()
+            
+            # Display test results
+            if 'error' in results:
+                print(f"❌ Test failed: {results['error']}")
+            else:
+                print(f"✅ JTAG test completed successfully!")
+                print(f"Success Rate: {results['success_rate']:.2%}")
+                print(f"Successful Cycles: {results['successful_cycles']}/{results['total_cycles']}")
+                
+                if results.get('report_files'):
+                    print(f"\nReports generated:")
+                    for format_type, filepath in results['report_files'].items():
+                        print(f"  {format_type.upper()}: {filepath}")
+        
+        finally:
+            runner.cleanup_components()
+        
+    except ImportError:
+        print("❌ JTAG test runner not available")
+    except Exception as e:
+        print(f"❌ Error running JTAG test: {e}")
+
+
+def jtag_device_detection():
+    """Run JTAG device detection."""
+    try:
+        from libs.xilinx_jtag import XilinxJTAGInterface, JTAGConfig, JTAGInterface
+        
+        print("Scanning for JTAG devices...")
+        
+        # Create JTAG interface
+        config = JTAGConfig(verbose_logging=True)
+        with XilinxJTAGInterface(config) as jtag:
+            devices = jtag.scan_devices()
+            
+            if not devices:
+                print("❌ No JTAG devices found")
+            else:
+                print(f"✅ Found {len(devices)} JTAG device(s):")
+                for device in devices:
+                    print(f"  Device {device.index}: {device.name} (ID: {device.idcode})")
+        
+    except ImportError:
+        print("❌ JTAG library not available")
+    except Exception as e:
+        print(f"❌ Error during device detection: {e}")
+
+
+def run_jtag_demo():
+    """Run JTAG demo."""
+    try:
+        import subprocess
+        import sys
+        
+        demo_script = "examples/xilinx_jtag_demo.py"
+        if not os.path.exists(demo_script):
+            print(f"❌ Demo script not found: {demo_script}")
+            return
+        
+        print("Running JTAG demo...")
+        result = subprocess.run([sys.executable, demo_script], capture_output=False)
+        
+        if result.returncode == 0:
+            print("✅ JTAG demo completed successfully")
+        else:
+            print("❌ JTAG demo failed")
+        
+    except Exception as e:
+        print(f"❌ Error running JTAG demo: {e}")
+
+
+def generate_boot_image():
+    """Generate boot image using bootgen."""
+    try:
+        from libs.xilinx_tools_manager import XilinxToolsManager, load_xilinx_tools_config
+        
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        print(f"Generating boot image with config: {config_file}")
+        
+        # Load configuration
+        config = load_xilinx_tools_config(config_file)
+        manager = XilinxToolsManager(config)
+        
+        # Resolve tool paths
+        manager.resolve_tool_paths()
+        
+        # Initialize bootgen
+        if not manager.initialize_bootgen():
+            print("❌ Failed to initialize bootgen")
+            return
+        
+        # Load bootgen configuration
+        with open(config_file, 'r') as f:
+            config_data = json.load(f)
+        
+        bootgen_config = config_data.get('bootgen_config', {})
+        if not bootgen_config:
+            print("❌ No bootgen configuration found")
+            return
+        
+        # Generate boot image
+        success = manager.generate_boot_image(bootgen_config)
+        
+        if success:
+            print(f"✅ Boot image generated: {bootgen_config.get('output_file', 'boot.bin')}")
+        else:
+            print("❌ Failed to generate boot image")
+        
+    except ImportError:
+        print("❌ Xilinx tools manager not available")
+    except Exception as e:
+        print(f"❌ Error generating boot image: {e}")
+
+
+def vivado_operations_menu():
+    """Menu for Vivado operations."""
+    while True:
+        print("\n" + "-" * 40)
+        print("VIVADO OPERATIONS")
+        print("-" * 40)
+        print("1. Generate Bitstream")
+        print("2. Associate ELF File")
+        print("3. Add Project")
+        print("4. List Projects")
+        print("5. Back to JTAG Menu")
+        print()
+        
+        try:
+            choice = input("Select an option (1-5): ").strip()
+            
+            if choice == '1':
+                generate_vivado_bitstream()
+            elif choice == '2':
+                associate_elf_file()
+            elif choice == '3':
+                add_vivado_project()
+            elif choice == '4':
+                list_vivado_projects()
+            elif choice == '5':
+                break
+            else:
+                print("❌ Invalid choice. Please select 1-5.")
+                
+        except KeyboardInterrupt:
+            break
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def generate_vivado_bitstream():
+    """Generate bitstream for Vivado project."""
+    try:
+        from libs.xilinx_tools_manager import XilinxToolsManager, load_xilinx_tools_config
+        
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        # Load configuration
+        config = load_xilinx_tools_config(config_file)
+        manager = XilinxToolsManager(config)
+        
+        # Resolve tool paths
+        manager.resolve_tool_paths()
+        
+        # Load project configuration
+        with open(config_file, 'r') as f:
+            config_data = json.load(f)
+        
+        projects = config_data.get('vivado_projects', [])
+        if not projects:
+            print("❌ No Vivado projects configured")
+            return
+        
+        # Show available projects
+        print("Available projects:")
+        for i, project in enumerate(projects):
+            print(f"  {i+1}. {project['name']} - {project['project_path']}")
+        
+        choice = input("Select project (number): ").strip()
+        try:
+            project_index = int(choice) - 1
+            if 0 <= project_index < len(projects):
+                project = projects[project_index]
+                project_name = project['name']
+                
+                # Add project to manager
+                manager.add_vivado_project(
+                    project_name,
+                    project['project_path'],
+                    project.get('target_cpu', 'ps7_cortexa9_0')
+                )
+                
+                # Generate bitstream
+                print(f"Generating bitstream for project: {project_name}")
+                bitstream_path = manager.generate_vivado_bitstream(project_name)
+                
+                if bitstream_path:
+                    print(f"✅ Bitstream generated: {bitstream_path}")
+                else:
+                    print("❌ Failed to generate bitstream")
+            else:
+                print("❌ Invalid project selection")
+        except ValueError:
+            print("❌ Invalid input")
+        
+    except ImportError:
+        print("❌ Xilinx tools manager not available")
+    except Exception as e:
+        print(f"❌ Error generating bitstream: {e}")
+
+
+def associate_elf_file():
+    """Associate ELF file with Vivado project."""
+    try:
+        from libs.xilinx_tools_manager import XilinxToolsManager, load_xilinx_tools_config
+        
+        config_file = get_config_file()
+        if not config_file:
+            return
+        
+        # Load configuration
+        config = load_xilinx_tools_config(config_file)
+        manager = XilinxToolsManager(config)
+        
+        # Resolve tool paths
+        manager.resolve_tool_paths()
+        
+        # Load project configuration
+        with open(config_file, 'r') as f:
+            config_data = json.load(f)
+        
+        projects = config_data.get('vivado_projects', [])
+        if not projects:
+            print("❌ No Vivado projects configured")
+            return
+        
+        # Show available projects
+        print("Available projects:")
+        for i, project in enumerate(projects):
+            print(f"  {i+1}. {project['name']} - {project['project_path']}")
+        
+        choice = input("Select project (number): ").strip()
+        try:
+            project_index = int(choice) - 1
+            if 0 <= project_index < len(projects):
+                project = projects[project_index]
+                project_name = project['name']
+                
+                # Get ELF file path
+                elf_path = input("Enter ELF file path: ").strip()
+                if not elf_path:
+                    print("❌ No ELF file path specified")
+                    return
+                
+                # Add project to manager
+                manager.add_vivado_project(
+                    project_name,
+                    project['project_path'],
+                    project.get('target_cpu', 'ps7_cortexa9_0')
+                )
+                
+                # Associate ELF file
+                print(f"Associating ELF file with project: {project_name}")
+                success = manager.associate_elf_with_project(project_name, elf_path)
+                
+                if success:
+                    print("✅ ELF file associated successfully")
+                else:
+                    print("❌ Failed to associate ELF file")
+            else:
+                print("❌ Invalid project selection")
+        except ValueError:
+            print("❌ Invalid input")
+        
+    except ImportError:
+        print("❌ Xilinx tools manager not available")
+    except Exception as e:
+        print(f"❌ Error associating ELF file: {e}")
+
+
+def add_vivado_project():
+    """Add a new Vivado project."""
+    try:
+        project_name = input("Enter project name: ").strip()
+        if not project_name:
+            print("❌ No project name specified")
+            return
+        
+        project_path = input("Enter project path (.xpr file): ").strip()
+        if not project_path:
+            print("❌ No project path specified")
+            return
+        
+        target_cpu = input("Enter target CPU (default: ps7_cortexa9_0): ").strip()
+        if not target_cpu:
+            target_cpu = "ps7_cortexa9_0"
+        
+        # Load existing configuration
+        config_file = get_config_file()
+        if config_file and os.path.exists(config_file):
+            with open(config_file, 'r') as f:
+                config_data = json.load(f)
+        else:
+            config_data = {}
+        
+        # Add project to configuration
+        if 'vivado_projects' not in config_data:
+            config_data['vivado_projects'] = []
+        
+        new_project = {
+            'name': project_name,
+            'project_path': project_path,
+            'target_cpu': target_cpu
+        }
+        
+        config_data['vivado_projects'].append(new_project)
+        
+        # Save configuration
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f, indent=2)
+        
+        print(f"✅ Project added: {project_name}")
+        
+    except Exception as e:
+        print(f"❌ Error adding project: {e}")
+
+
+def list_vivado_projects():
+    """List configured Vivado projects."""
+    try:
+        config_file = get_config_file()
+        if not config_file or not os.path.exists(config_file):
+            print("❌ No configuration file found")
+            return
+        
+        with open(config_file, 'r') as f:
+            config_data = json.load(f)
+        
+        projects = config_data.get('vivado_projects', [])
+        if not projects:
+            print("No Vivado projects configured")
+            return
+        
+        print("Configured Vivado projects:")
+        for i, project in enumerate(projects):
+            print(f"  {i+1}. {project['name']}")
+            print(f"     Path: {project['project_path']}")
+            print(f"     Target CPU: {project.get('target_cpu', 'ps7_cortexa9_0')}")
+            print()
+        
+    except Exception as e:
+        print(f"❌ Error listing projects: {e}")
+
+
+def generate_jtag_config():
+    """Generate JTAG configuration."""
+    try:
+        from libs.xilinx_tools_manager import create_sample_xilinx_tools_config
+        
+        config = create_sample_xilinx_tools_config()
+        filename = "config/xilinx_tools_config.json"
+        
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        
+        print(f"✅ Xilinx tools configuration generated: {filename}")
+        print("Edit this file with your specific tool paths and settings.")
+        
+    except ImportError:
+        print("❌ Xilinx tools manager not available")
+    except Exception as e:
+        print(f"❌ Error generating configuration: {e}")
 
 
 def run_interactive_test():
