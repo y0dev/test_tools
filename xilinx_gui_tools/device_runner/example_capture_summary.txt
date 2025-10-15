@@ -25,3 +25,4 @@ Files Generated:
 - GPIO_REGION_0x40000000.bin
 - AXI_REGION_0x43C00000.bin
 - capture_summary.txt (this file)
+

@@ -34,3 +34,4 @@ Example Variable Discoveries:
   Found uint32 at 0x00100010: 0x00000003
   Found array pattern starting at 0x00140000
   Found array pattern starting at 0x00160000
+

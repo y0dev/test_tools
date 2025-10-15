@@ -43,6 +43,31 @@ chmod +x run_device_runner_cli.sh
 ```bash
 # Run directly with Tcl
 tclsh device_runner_cli.tcl
+
+# Run with command line arguments
+tclsh device_runner_cli.tcl -arch zynq -mode user -hw_server localhost
+```
+
+### **Command Line Arguments**
+```bash
+# Available options
+device_runner_cli.tcl [options]
+
+Options:
+  -arch <arch>        Target architecture (default: zynq)
+  -mode <mode>        Operation mode (default: user)
+  -hw_server <server> Hardware server address (default: localhost)
+  -ps_ref_clk <freq>  PS reference clock frequency (default: 0)
+  -term_app <app>     Terminal application (default: device_runner_term.bat)
+  -log_dir <dir>      Log directory (default: logs)
+  -xsdb_path <path>   Path to XSDB executable
+  -jtag_tcp <url>     JTAG TCP connection URL
+  -help               Show help message
+
+Examples:
+  device_runner_cli.tcl -arch zynq -mode user -hw_server localhost
+  device_runner_cli.tcl -xsdb_path C:/Xilinx/Vitis/2023.2/bin/xsdb.exe
+  device_runner_cli.tcl -jtag_tcp 192.168.1.100:3121
 ```
 
 ## 📋 **Menu System**
@@ -91,6 +116,16 @@ Parameter 3 set to: 0x00001000
 - **Path**: Full path to your BIT file
 - **Validation**: Checks if file exists
 - **Logging**: All changes logged
+
+### **Command Line Configuration**
+- **Architecture**: Target FPGA architecture (default: zynq)
+- **Mode**: Operation mode (default: user)
+- **Hardware Server**: Server address for hardware connection (default: localhost)
+- **PS Reference Clock**: Clock frequency setting (default: 0)
+- **Terminal Application**: Terminal app for execution (default: device_runner_term.bat)
+- **Log Directory**: Directory for log files (default: logs)
+- **XSDB Path**: Path to XSDB executable (optional)
+- **JTAG TCP**: JTAG TCP connection URL (optional)
 
 ### **Parameter Configuration**
 - **Parameter 1**: Menu selection (Short/Medium/Tall) - configured during workflow
@@ -145,6 +180,12 @@ output/
 Configuration:
   Application: C:\my_app\my_application.exe
   BIT file: C:\my_bit\my_design.bit
+  Architecture: zynq
+  Mode: user
+  Hardware Server: localhost
+  PS Reference Clock: 0
+  Terminal Application: device_runner_term.bat
+  Log Directory: logs
 
 Start workflow? (y/[n]) -> y
 
@@ -182,6 +223,7 @@ RAM data captured successfully
 
 Workflow completed successfully!
 Results saved to: output
+Logs saved to: logs
 ```
 
 ## 🔧 **Technical Details**

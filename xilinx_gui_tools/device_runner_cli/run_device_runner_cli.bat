@@ -1,30 +1,25 @@
 @echo off
-REM Launch Device Runner CLI (Windows)
-set SCRIPT_DIR=%~dp0
-cd /d "%SCRIPT_DIR%"
-
-echo Starting Device Runner CLI...
+title Device Runner CLI
+echo ========================================
+echo    Device Runner CLI v1.0.0 - Windows
+echo ========================================
 echo.
 
-REM Check if Tcl is available
-tclsh -c "puts \"Tcl version: [info patchlevel]\"" 2>nul
-if %errorlevel% neq 0 (
-    echo ERROR: Tcl/Tk not found in PATH
-    echo Please install Tcl/Tk or add it to your PATH
-    echo.
-    echo You can download Tcl/Tk from:
-    echo https://www.tcl.tk/software/tcltk/
-    echo.
-    pause
-    exit /b 1
-)
+rem Uncomment below to automatically start hardware server on local machine
+rem tasklist | findstr /i "hw_server.exe" >nul && goto LAUNCH_DEVICE_RUNNER_CLI
+rem echo Starting Hardware Server...
+rem start /b %HW_SERVER_PATH%/hw_server.bat"
+rem :L
 
-echo Tcl/Tk found, launching Device Runner CLI...
+echo Starting Device Runner CLI via XSDB...
 echo.
 
-REM Launch the CLI application
-tclsh "%SCRIPT_DIR%device_runner_cli.tcl" %*
+start /b %XSDB_PATH%/xsdb device_runner_cli.tcl ^
+        -arch zynq ^
+        -mode user ^
+        -hw_server localhost ^
+        -ps_ref_clk 0 ^
+        -term_app device_runner_term.bat ^
+        -log_dir logs
 
-echo.
-echo Device Runner CLI exited
-pause
+

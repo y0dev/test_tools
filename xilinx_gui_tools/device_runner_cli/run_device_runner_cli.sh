@@ -26,3 +26,4 @@ tclsh "$SCRIPT_DIR/device_runner_cli.tcl" "$@"
 
 echo
 echo "Device Runner CLI exited"
+

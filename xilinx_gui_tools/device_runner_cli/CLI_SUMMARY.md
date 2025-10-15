@@ -280,3 +280,4 @@ The Device Runner CLI provides:
 - **Variable Discovery**: Automatic detection of uint32_t and array variables
 
 Perfect for **professional FPGA application development** with a command-line interface that matches the style of Xilinx tools and provides all the functionality of the GUI version!
+
