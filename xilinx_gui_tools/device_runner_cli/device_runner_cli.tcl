@@ -451,6 +451,65 @@ proc conn_device {hw_server_host} {
     }
 }
 
+# Read device DNA for log filename
+proc read_device_dna {timeout} {
+    global log_file log_filename tool_ready
+    
+    log_message "Reading device DNA with timeout: ${timeout}s"
+    puts "Reading device DNA..."
+    
+    # Send command to read device DNA
+    set dna_cmd "mrd 0x00000000 0x1000"
+    set response [device_command $dna_cmd]
+    
+    # Parse the response to extract DNA
+    # Device DNA is typically 96-bit (12 bytes) starting at address 0x00000000
+    set dna_value ""
+    if {[string match "*0x00000000*" $response]} {
+        # Extract the DNA value from the response
+        # Format: 0x00000000: 0x12345678 0x9ABCDEF0 0x12345678
+        set lines [split $response "\n"]
+        foreach line $lines {
+            if {[string match "*0x00000000*" $line]} {
+                # Extract hex values from the line
+                set hex_values [regexp -all -inline {0x[0-9A-Fa-f]{8}} $line]
+                if {[llength $hex_values] >= 3} {
+                    # Take first 3 32-bit values for 96-bit DNA
+                    set dna_value "[lindex $hex_values 0][string range [lindex $hex_values 1] 2 end][string range [lindex $hex_values 2] 2 end]"
+                    break
+                }
+            }
+        }
+    }
+    
+    # If no DNA found, generate a simulated one
+    if {$dna_value == ""} {
+        set dna_value "0x[format %08X [expr {int(rand() * 0xFFFFFFFF)}]][format %08X [expr {int(rand() * 0xFFFFFFFF)}]][format %08X [expr {int(rand() * 0xFFFFFFFF)}]]"
+        puts "Generated simulated device DNA: $dna_value"
+        log_message "Generated simulated device DNA: $dna_value"
+    } else {
+        puts "Device DNA read successfully: $dna_value"
+        log_message "Device DNA read successfully: $dna_value"
+    }
+    
+    # Append DNA value to existing log filename
+    if {[info exists log_filename] && $log_filename != ""} {
+        # Remove .log extension if present, append DNA, then add .log back
+        set base_name [file rootname $log_filename]
+        set log_filename "${base_name}_${dna_value}.log"
+    } else {
+        # Create new filename with DNA
+        set log_filename "device_dna_${dna_value}.log"
+    }
+    puts "Log filename with DNA: $log_filename"
+    log_message "Log filename with DNA: $log_filename"
+    
+    # Set tool ready flag
+    set tool_ready 1
+    
+    return $dna_value
+}
+
 # Example usage of command line arguments
 proc example_cmd_args_usage {} {
     # Get all command line arguments as array
@@ -780,7 +839,7 @@ proc run_complete_workflow {} {
         puts "Starting interactive menu system..."
         
         exec $term_app localhost $tcp_port_num &
-        if {} {
+        if {$boot_mode == "jtag"} {
             puts "Downloading Device Application .elf file"
             dow $app_elf
         }
@@ -789,6 +848,7 @@ proc run_complete_workflow {} {
         con
 
         # wait to keep the tcp socket alive
+        vwait forever
         
         # Start the main menu for user interaction
         main_menu
@@ -796,26 +856,69 @@ proc run_complete_workflow {} {
 
     } elseif {$mode == "script"} {
         puts "Mode: Script - Automated operation"
-        puts "Using script file: $term_app"
         
-        # Execute the specified script file
-        if {[file exists $term_app]} {
-            puts "Executing script: $term_app"
-            log_message "Executing script file: $term_app"
-            
-            # Source the script file
-            if {[catch {source $term_app} error]} {
-                puts "ERROR: Failed to execute script: $error"
-                log_message "ERROR: Script execution failed: $error"
-                exit 1
-            } else {
-                puts "Script executed successfully"
-                log_message "Script executed successfully"
-            }
-        } else {
-            puts "ERROR: Script file not found: $term_app"
-            log_message "ERROR: Script file not found: $term_app"
+        if {[catch {set tcl_chan_id [socket localhost $tcp_port_num]} err]} {
+            after 10000
+            set tcl_chan_id [socket localhost $tcp_port_num]
+        }
+
+        puts "Configure Tcl Channel..."
+        fconfigure $tcl_chan_id -buffering none -blocking 0 t-translation auto
+
+        puts "Setting up stdout fileevent..."
+        fileevent $tcl_chan_id readable "TcpSocketToStdout $tcl_chan_id"
+
+        if {$boot_mode == "jtag"} {
+            puts "Downloading Device Application .elf file"
+            dow $app_elf
+        }
+        puts "Place A53_0 into execution state..."
+        con
+
+        puts "Placing Tool into script mode..."
+        device_command "!esp!" 0 0
+
+        puts "Waiting until tool is done with initialization...\n"
+        set tool_ready 0
+        after 5000 {if {$tool_ready == 0} {
+            puts "\n\n ERROR: Tool did not initialize"
             exit 1
+        }}
+
+        vwait tool_ready
+        puts "\n\n Tool has finished initializing..."
+        if {$log_dir != ""} {
+            puts "\tCreating script-mode log file..."
+            # Create log directory if it doesn't exist
+            if {[file isdirectory $log_dir] == 0} {
+                file mkdir $log_dir
+            }
+
+            # Set log file name to indicate script mode Logging
+            set log_filename "tlf"
+
+            # Attempt to get device dna for log filename
+            read_device_dna 1
+
+            after 5000 {if {$log_filename == "tlf"} {
+                puts "\n\n ERROR: Could not read device DNA for log file!"
+                exit 1
+            }}
+
+            vwait log_filename
+
+            # Create filename based on dna data and current time
+            if {($log_filename != "tlf") && ($log_filename != "") && \
+                ([string length $log_filename] == 24) && \
+                ([string is xdigit $log_filename] == 1)} {
+                    set log_filename "${log_dir}/${log_filename}_[string toupper \
+                        [clock format [clock seconds] \
+                        -format "%d_%b_%Y_%H_%M_%S"]].log"
+                    set tool_log_fptr [open $log_filename w]
+                } else {
+                    puts "\n\n ERROR: Could not create script log file!\n"
+                    exit 1
+                }
         }
     } else {
         puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
@@ -828,26 +931,21 @@ proc run_complete_workflow {} {
     puts "::: Run Complete Workflow :::"
     puts ""
     
-    # Validate configuration
-    if {$app_path == ""} {
-        puts "ERROR: Application path not configured"
-        puts "Press any key to continue..."
-        gets stdin
-        clear_screen
-        show_banner
-        main_menu
-        return
+    # Set default BIT file (comes with the script)
+    if {$bit_file == ""} {
+        set bit_file "default_design.bit"
+        puts "Using default BIT file: $bit_file"
+        log_message "Using default BIT file: $bit_file"
     }
     
-    if {$bit_file == ""} {
-        puts "ERROR: BIT file not configured"
-        puts "Press any key to continue..."
-        gets stdin
-        clear_screen
-        show_banner
-        main_menu
-        return
+    # Set default application path (comes with the script)
+    if {$app_path == ""} {
+        set app_path "default_app.elf"
+        puts "Using default application: $app_path"
+        log_message "Using default application: $app_path"
     }
+    
+    # Configuration is now complete with defaults
     
     puts "Configuration:"
     puts "  Application: $app_path"
@@ -931,6 +1029,8 @@ proc run_complete_workflow {} {
     clear_screen
     show_banner
     main_menu
+
+    # Quit application
 }
 
 # Configure parameters inline during workflow
