@@ -2429,6 +2429,8 @@ def generate_vivado_bitstream():
             print(f"  {i+1}. {project['name']} - {project['project_path']}")
         
         choice = input("Select project (number): ").strip()
+        bitstream_path = None
+        
         try:
             project_index = int(choice) - 1
             if 0 <= project_index < len(projects):
@@ -2442,19 +2444,25 @@ def generate_vivado_bitstream():
                     project.get('target_cpu', 'ps7_cortexa9_0')
                 )
                 
-        # Ask for custom TCL script
-        custom_tcl = input("Enter custom TCL script path (or press Enter to use default/configured): ").strip()
-        if not custom_tcl:
-            custom_tcl = None
-        
-        # Ask for output directory
-        output_dir = input("Enter output directory (or press Enter for default): ").strip()
-        if not output_dir:
-            output_dir = None
-        
-        # Generate bitstream
-        print(f"Generating bitstream for project: {project_name}")
-        bitstream_path = manager.generate_vivado_bitstream(project_name, output_dir, custom_tcl)
+                # Ask for custom TCL script
+                custom_tcl = input("Enter custom TCL script path (or press Enter to use default/configured): ").strip()
+                if not custom_tcl:
+                    custom_tcl = None
+                
+                # Ask for output directory
+                output_dir = input("Enter output directory (or press Enter for default): ").strip()
+                if not output_dir:
+                    output_dir = None
+                
+                # Generate bitstream
+                print(f"Generating bitstream for project: {project_name}")
+                bitstream_path = manager.generate_vivado_bitstream(project_name, output_dir, custom_tcl)
+            else:
+                print("❌ Invalid project selection")
+                return
+        except ValueError:
+            print("❌ Invalid input. Please enter a number.")
+            return
         
         if bitstream_path:
             print(f"✅ Bitstream generated: {bitstream_path}")
@@ -2872,7 +2880,7 @@ def run_interactive_test():
             config = json.load(f)
         
         # Create test runner
-        runner = PowerCycleTestRunner()
+        runner = PowerCycleTestRunner(config_file)
         runner.config = config
         
         # Setup logging
@@ -2902,7 +2910,7 @@ def run_automated_test():
             config = json.load(f)
         
         # Create test runner
-        runner = PowerCycleTestRunner()
+        runner = PowerCycleTestRunner(config_file)
         runner.config = config
         
         # Setup logging
@@ -3202,7 +3210,7 @@ def main():
         config = modify_config_for_args(config, args)
         
         # Initialize test runner with configuration
-        runner = PowerCycleTestRunner()
+        runner = PowerCycleTestRunner(args.config)
         runner.config = config  # Override config
         
         # Configure logging system with specified level
