@@ -1,0 +1,36 @@
+Variable Analysis Report
+======================
+Timestamp: 2024-12-01 14:30:22
+User Parameters: 0x40000000 0x43C00000 0x00001000
+
+Memory Regions Analyzed:
+  DDR_START: 0x00000000 - 0x0000FFFF
+  DDR_LOW: 0x00010000 - 0x0001FFFF
+  DDR_MID_LOW: 0x00020000 - 0x0002FFFF
+  DDR_MID: 0x00030000 - 0x0003FFFF
+  DDR_MID_HIGH: 0x00040000 - 0x0004FFFF
+  DDR_HIGH: 0x00050000 - 0x0005FFFF
+  APP_DATA: 0x00100000 - 0x0010FFFF
+  APP_STACK: 0x00110000 - 0x0011FFFF
+  APP_HEAP: 0x00120000 - 0x0013FFFF
+  APP_ARRAYS: 0x00140000 - 0x0015FFFF
+  APP_OUTPUT: 0x00160000 - 0x0017FFFF
+  APP_CONFIG: 0x00180000 - 0x0018FFFF
+  GPIO_REGION: 0x40000000 - 0x40000FFF
+  AXI_REGION: 0x43C00000 - 0x43C00FFF
+  PS_PERIPHERALS: 0xE0000000 - 0xE000FFFF
+
+Variable Types Found:
+  - uint32_t values: Individual 32-bit integers
+  - Array patterns: Sequential data structures
+  - String patterns: Null-terminated strings
+  - Struct patterns: Complex data structures
+
+Example Variable Discoveries:
+  Found uint32 at 0x00100000: 0x12345678
+  Found uint32 at 0x00100004: 0xABCDEF00
+  Found uint32 at 0x00100008: 0x00000001
+  Found uint32 at 0x0010000C: 0x00000002
+  Found uint32 at 0x00100010: 0x00000003
+  Found array pattern starting at 0x00140000
+  Found array pattern starting at 0x00160000

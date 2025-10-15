@@ -1,0 +1,27 @@
+RAM Data Capture Summary
+========================
+Timestamp: 2024-12-01 14:30:22
+Capture Directory: output/capture_20241201_143022
+
+User Input Parameters:
+  Parameter 1: 0x40000000
+  Parameter 2: 0x43C00000
+  Parameter 3: 0x00001000
+  Formatted: 0x40000000 0x43C00000 0x00001000
+
+Captured Regions:
+- DDR_LOW (0x00000000, 1MB)
+- DDR_MID (0x00100000, 1MB)
+- DDR_HIGH (0x00200000, 1MB)
+- GPIO_REGION (0x40000000, 4KB)
+- AXI_REGION (0x43C00000, 4KB)
+
+Files Generated:
+- user_inputs.txt (user parameters)
+- capture_ram.tcl (capture script)
+- DDR_LOW_0x00000000.bin
+- DDR_MID_0x00100000.bin
+- DDR_HIGH_0x00200000.bin
+- GPIO_REGION_0x40000000.bin
+- AXI_REGION_0x43C00000.bin
+- capture_summary.txt (this file)
