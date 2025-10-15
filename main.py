@@ -1450,12 +1450,33 @@ def parse_serial_data():
             # Ask if user wants to save results
             save_results = input("Do you want to save parsed results? (y/n): ").strip().lower()
             if save_results in ['y', 'yes']:
-                output_file = input("Enter output file path (or press Enter for default): ").strip()
-                if not output_file:
-                    output_file = f"parsed_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                from libs.output_manager import get_output_manager
+                output_manager = get_output_manager()
                 
-                parser.save_results(results, output_file)
-                print(f"✅ Results saved to: {output_file}")
+                # Generate output files in multiple formats
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                
+                # JSON output
+                json_path = output_manager.get_parsed_data_path("serial_parsed", "json")
+                parser.save_results(results, str(json_path))
+                print(f"✅ JSON results saved to: {json_path}")
+                
+                # CSV output
+                csv_path = output_manager.get_parsed_data_path("serial_parsed", "csv")
+                parser.save_results(results, str(csv_path))
+                print(f"✅ CSV results saved to: {csv_path}")
+                
+                # HTML output
+                html_path = output_manager.get_parsed_data_path("serial_parsed", "html")
+                parser.save_results(results, str(html_path))
+                print(f"✅ HTML results saved to: {html_path}")
+                
+                # TXT output
+                txt_path = output_manager.get_parsed_data_path("serial_parsed", "txt")
+                parser.save_results(results, str(txt_path))
+                print(f"✅ TXT results saved to: {txt_path}")
+                
+                print(f"\n📊 All output files saved to: {output_manager.base_output_dir / 'parsed_data'}")
         else:
             print("❌ No data could be parsed from the log file")
         

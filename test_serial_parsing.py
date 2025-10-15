@@ -16,6 +16,7 @@ import re
 sys.path.append(str(Path(__file__).parent.parent / "libs"))
 
 from libs.serial_logger import SerialDataParser
+from libs.output_manager import get_output_manager
 
 def test_data_parsing():
     """Test the data parsing functionality with sample data."""
@@ -79,18 +80,18 @@ def test_data_parsing():
     print()
     
     # Save results in different formats
+    output_manager = get_output_manager()
     file_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
     # JSON output
-    json_file = f"test_output/parsed_data_{file_timestamp}.json"
-    os.makedirs("test_output", exist_ok=True)
+    json_path = output_manager.get_parsed_data_path("serial_test", "json")
     
-    with open(json_file, 'w') as f:
+    with open(json_path, 'w') as f:
         json.dump(results, f, indent=2)
-    print(f"📄 JSON output saved to: {json_file}")
+    print(f"📄 JSON output saved to: {json_path}")
     
     # CSV output
-    csv_file = f"test_output/parsed_data_{file_timestamp}.csv"
+    csv_path = output_manager.get_parsed_data_path("serial_test", "csv")
     
     # Group results by pattern type for CSV
     pattern_groups = {}
@@ -118,12 +119,12 @@ def test_data_parsing():
                 
                 writer.writerow([pattern_name, timestamp, data, extracted_str])
     
-    print(f"📄 CSV output saved to: {csv_file}")
+    print(f"📄 CSV output saved to: {csv_path}")
     
     # TXT output (formatted)
-    txt_file = f"test_output/parsed_data_{file_timestamp}.txt"
+    txt_path = output_manager.get_parsed_data_path("serial_test", "txt")
     
-    with open(txt_file, 'w', encoding='utf-8') as f:
+    with open(txt_path, 'w', encoding='utf-8') as f:
         f.write("Serial Logger Parsing Results\n")
         f.write("=" * 50 + "\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -147,12 +148,17 @@ def test_data_parsing():
             
             f.write("\n")
     
-    print(f"📄 TXT output saved to: {txt_file}")
+    print(f"📄 TXT output saved to: {txt_path}")
+    
+    # HTML output
+    html_path = output_manager.get_parsed_data_path("serial_test", "html")
+    parser.save_results(results, str(html_path))
+    print(f"📄 HTML output saved to: {html_path}")
     
     # Generate detailed analysis
-    analysis_file = f"test_output/analysis_{file_timestamp}.txt"
+    analysis_path = output_manager.get_parsed_data_path("serial_analysis", "txt")
     
-    with open(analysis_file, 'w', encoding='utf-8') as f:
+    with open(analysis_path, 'w', encoding='utf-8') as f:
         f.write("Detailed Analysis Report\n")
         f.write("=" * 50 + "\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
@@ -217,7 +223,9 @@ def test_data_parsing():
         f.write(f"Test cycles completed: {len(test_pass_entries)}\n")
         f.write(f"Array tests completed: {len([r for r in results if r.get('pattern') == 'array_test_end'])}\n")
     
-    print(f"📄 Analysis report saved to: {analysis_file}")
+    print(f"📄 Analysis report saved to: {analysis_path}")
+    
+    print(f"\n📊 All output files saved to: {output_manager.base_output_dir / 'parsed_data'}")
     
     print()
     print("=== Test Results ===")

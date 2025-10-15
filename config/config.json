@@ -1,6 +1,6 @@
 {
   "power_supply": {
-    "resource": "GPIB0::5::INSTR",
+    "port": "COM3",
     "voltage": 5.0,
     "current_limit": 0.5
   },

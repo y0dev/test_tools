@@ -4,8 +4,8 @@
       "description": "Verify correct boot data is printed",
       "uart_patterns": [
         {
-          "regex": "Data:\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+)",
-          "expected": [["0x12345678", "0xDEADBEEF"]]
+          "regex": "Data:\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+)",
+          "expected": [["0x12345678", "0xDEADBEEF","0x12345678", "0xDEADBEEF","0x23456789","0xABCDEF01"]]
         },
         {
           "regex": "Version:\\s*v(\\d\\.\\d)",
