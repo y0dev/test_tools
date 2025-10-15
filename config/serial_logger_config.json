@@ -1,0 +1,34 @@
+{
+  "serial": {
+    "port": "COM3",
+    "baud": 115200,
+    "timeout": 1.0,
+    "parity": "N",
+    "stopbits": 1,
+    "bytesize": 8
+  },
+  "logging": {
+    "log_directory": "./output/serial_logs",
+    "log_format": "timestamp,data",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+    "auto_create_dirs": true,
+    "use_date_hierarchy": true,
+    "date_format": "%Y/%m_%b/%m_%d"
+  },
+  "data_parsing": {
+    "enabled": false,
+    "patterns": [],
+    "output_formats": [
+      "json",
+      "csv",
+      "txt"
+    ],
+    "save_raw_data": true
+  },
+  "filters": {
+    "min_data_length": 1,
+    "max_data_length": 1000,
+    "exclude_patterns": [],
+    "include_patterns": []
+  }
+}

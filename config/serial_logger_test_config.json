@@ -1,0 +1,142 @@
+{
+  "metadata": {
+    "name": "Test Data Parser",
+    "description": "Configuration for parsing test data with timestamps, arrays, and test results",
+    "created": "2025-10-12T14:45:00.000000",
+    "version": "1.0"
+  },
+  "serial": {
+    "port": "COM3",
+    "baud": 115200,
+    "timeout": 1.0,
+    "parity": "N",
+    "stopbits": 1,
+    "bytesize": 8
+  },
+  "logging": {
+    "log_directory": "./output/serial_logs",
+    "log_format": "timestamp,data",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+    "auto_create_dirs": true,
+    "use_date_hierarchy": true,
+    "date_format": "%Y/%m_%b/%m_%d"
+  },
+  "data_parsing": {
+    "enabled": true,
+    "patterns": [
+      {
+        "name": "test_mode",
+        "description": "Extract test mode status",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Test mode:\\s*(ENABLED|DISABLED)$",
+        "type": "status",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "mode"]
+      },
+      {
+        "name": "test_start",
+        "description": "Extract test start events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(TEST_START)$",
+        "type": "event",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "event"]
+      },
+      {
+        "name": "test_end",
+        "description": "Extract test end events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(TEST_END)$",
+        "type": "event",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "event"]
+      },
+      {
+        "name": "test_pass",
+        "description": "Extract test pass events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(TEST_PASS)$",
+        "type": "result",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "result"]
+      },
+      {
+        "name": "test_data",
+        "description": "Extract test data with hex values and CRC",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*DATA:\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+),\\s*CRC=(0x[0-9A-Fa-f]+)$",
+        "type": "data",
+        "extract_groups": [1, 2, 3, 4],
+        "labels": ["timestamp", "data1", "data2", "crc"]
+      },
+      {
+        "name": "test_info",
+        "description": "Extract test information with voltage and temperature",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*INFO:\\s*Test OK,\\s*Voltage=([0-9.]+)V,\\s*Temp=([0-9]+)C$",
+        "type": "measurement",
+        "extract_groups": [1, 2, 3],
+        "labels": ["timestamp", "voltage", "temperature"]
+      },
+      {
+        "name": "uint8_array",
+        "description": "Extract UINT8 array data",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*UINT8_ARRAY:\\s*(.+)$",
+        "type": "array",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "uint8_data"]
+      },
+      {
+        "name": "uint32_array",
+        "description": "Extract UINT32 array data",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*UINT32_ARRAY:\\s*(.+)$",
+        "type": "array",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "uint32_data"]
+      },
+      {
+        "name": "array_test_start",
+        "description": "Extract array test start events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(ARRAY_TEST_START)$",
+        "type": "event",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "event"]
+      },
+      {
+        "name": "array_test_end",
+        "description": "Extract array test end events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(ARRAY_TEST_END)$",
+        "type": "event",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "event"]
+      },
+      {
+        "name": "system_idle",
+        "description": "Extract system idle messages",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(System idle - Press button to enable tests)$",
+        "type": "status",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "message"]
+      },
+      {
+        "name": "timestamp_data",
+        "description": "Extract timestamp and data from log lines (fallback)",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(.+)$",
+        "type": "timestamp",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "data"]
+      }
+    ],
+    "output_formats": [
+      "json",
+      "csv",
+      "txt"
+    ],
+    "save_raw_data": true
+  },
+  "filters": {
+    "min_data_length": 1,
+    "max_data_length": 1000,
+    "exclude_patterns": [
+      "^\\s*$",
+      "^\\r?\\n$"
+    ],
+    "include_patterns": [
+      "^\\[.*\\].*$"
+    ]
+  }
+}

@@ -8,6 +8,9 @@ numpy>=1.21.0
 # GPIB communication support
 pyvisa>=1.11.3
 
+# Process monitoring for terminal management
+psutil>=5.8.0
+
 # Optional dependencies for enhanced functionality
 # Uncomment as needed:
 
@@ -38,3 +41,7 @@ pyvisa>=1.11.3
 # black>=21.0.0
 # flake8>=3.9.0
 # mypy>=0.910
+
+# For Xilinx JTAG support
+# Note: anxsct and xsdb are part of Xilinx tools installation
+# Ensure Xilinx Vitis/Vivado is installed and in PATH

@@ -10,6 +10,14 @@
         {
           "regex": "Version:\\s*v(\\d\\.\\d)",
           "expected": ["v1.2"]
+        },
+        {
+          "regex": "Boot sequence started",
+          "expected": ["Boot sequence started"]
+        },
+        {
+          "regex": "^(.+)\\n(\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\")$",
+          "expected": [["Memory Dump", "\"0x12345678\", \"0xDEADBEEF\", \"0xABCDEF01\", \"0x98765432\", \"0x11111111\", \"0x22222222\""]]
         }
       ],
       "output_format": "json"

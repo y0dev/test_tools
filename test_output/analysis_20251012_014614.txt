@@ -1,0 +1,26 @@
+Detailed Analysis Report
+==================================================
+Generated: 2025-10-12 01:46:14
+
+Test Mode Analysis:
+--------------------
+
+Test Pass Events: 0
+Test Start Events: 0
+Test End Events: 0
+
+Test Data Analysis:
+--------------------
+
+Measurement Analysis:
+--------------------
+
+UINT8 Array Entries: 0
+UINT32 Array Entries: 0
+
+Summary:
+----------
+Total parsed entries: 23
+Unique patterns matched: 1
+Test cycles completed: 0
+Array tests completed: 0

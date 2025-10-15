@@ -1,0 +1,21 @@
+Serial Logger Parsing Results
+==================================================
+Generated: 2025-10-12 01:46:29
+Total Entries: 23
+Patterns Used: 1
+
+Pattern: timestamp_data
+------------------------------
+Count: 23
+  1. [2025-10-12T01:46:29.234204] [01:21:32] UINT8_ARRAY: 0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A
+     Extracted: {'timestamp': '01:21:32', 'data': 'UINT8_ARRAY: 0x01 0x02 0x03 0x04 0x05 0x06 0x07 0x08 0x09 0x0A'}
+  2. [2025-10-12T01:46:29.234204] [01:21:32] UINT32_ARRAY: 0x01020304 0x05060708 0x090A0B0C 0x0D0E0F10 0x11121314 0x15161718 0x191A1B1C 0x1D1E1F20 0x21222324 0x25262728
+     Extracted: {'timestamp': '01:21:32', 'data': 'UINT32_ARRAY: 0x01020304 0x05060708 0x090A0B0C 0x0D0E0F10 0x11121314 0x15161718 0x191A1B1C 0x1D1E1F20 0x21222324 0x25262728'}
+  3. [2025-10-12T01:46:29.234204] [01:21:32] ARRAY_TEST_END
+     Extracted: {'timestamp': '01:21:32', 'data': 'ARRAY_TEST_END'}
+  4. [2025-10-12T01:46:29.234204] [01:21:37] Test mode: DISABLED
+     Extracted: {'timestamp': '01:21:37', 'data': 'Test mode: DISABLED'}
+  5. [2025-10-12T01:46:29.234204] [01:21:38] System idle - Press button to enable tests
+     Extracted: {'timestamp': '01:21:38', 'data': 'System idle - Press button to enable tests'}
+     ... and 18 more entries
+

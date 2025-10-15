@@ -1,0 +1,70 @@
+{
+  "power_supply": {
+    "resource": "GPIB0::5::INSTR",
+    "voltage": 3.3,
+    "current_limit": 0.5
+  },
+  "uart_loggers": [
+    {
+      "port": "COM3",
+      "baud": 115200,
+      "display": true
+    }
+  ],
+  "tests": [
+    {
+      "name": "STM32_Numeric_Output_Test",
+      "description": "Capture and validate numeric output from STM32 DEV_SAMPLE_FUNCTION",
+      "cycles": 5,
+      "on_time": 10,
+      "off_time": 3,
+      "cycle_delay": 2,
+      "output_format": "json",
+      "uart_patterns": [
+        {
+          "regex": "^(\\d+)\\r\\n$",
+          "expected": ["5"],
+          "description": "Capture numeric output from DEV_SAMPLE_FUNCTION"
+        }
+      ]
+    },
+    {
+      "name": "STM32_Continuous_Logging_Test",
+      "description": "Continuous logging test to capture all STM32 output",
+      "cycles": 1,
+      "on_time": 30,
+      "off_time": 5,
+      "output_format": "csv",
+      "uart_patterns": [
+        {
+          "regex": ".*",
+          "expected": [],
+          "description": "Capture all output for analysis"
+        }
+      ]
+    },
+    {
+      "name": "STM32_Power_Cycle_Test",
+      "description": "Test STM32 behavior during power cycles",
+      "cycles": 3,
+      "on_time": 8,
+      "off_time": 4,
+      "output_format": "html",
+      "uart_patterns": [
+        {
+          "regex": "^(\\d+)\\r\\n$",
+          "expected": ["5"],
+          "description": "Verify numeric output after power cycle"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "log_directory": "./output/logs",
+    "report_directory": "./output/reports",
+    "detailed_logs": true,
+    "timestamp_format": "%Y-%m-%d_%H-%M-%S",
+    "log_level": "INFO"
+  }
+}
+

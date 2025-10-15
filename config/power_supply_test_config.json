@@ -1,0 +1,172 @@
+{
+  "metadata": {
+    "name": "Power Supply Test Parser",
+    "description": "Configuration for parsing power supply test data with voltage, current, and cycle events",
+    "created": "2025-10-12T14:50:00.000000",
+    "version": "1.0"
+  },
+  "power_supply": {
+    "interface": "rs232",
+    "port": "COM3",
+    "baud_rate": 9600,
+    "timeout": 1
+  },
+  "logging": {
+    "log_directory": "./output/power_supply_logs",
+    "log_format": "timestamp,data",
+    "timestamp_format": "%Y-%m-%d %H:%M:%S.%f",
+    "auto_create_dirs": true,
+    "use_date_hierarchy": true,
+    "date_format": "%Y/%m_%b/%m_%d"
+  },
+  "data_parsing": {
+    "enabled": true,
+    "patterns": [
+      {
+        "name": "voltage_set",
+        "description": "Extract voltage setting commands",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Setting voltage to\\s*([0-9.]+)\\s*V$",
+        "type": "command",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "voltage"]
+      },
+      {
+        "name": "voltage_measured",
+        "description": "Extract voltage measurements",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Measured voltage:\\s*([0-9.]+)\\s*V$",
+        "type": "measurement",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "voltage"]
+      },
+      {
+        "name": "current_set",
+        "description": "Extract current limit setting commands",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Setting current limit to\\s*([0-9.]+)\\s*A$",
+        "type": "command",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "current"]
+      },
+      {
+        "name": "output_on",
+        "description": "Extract output ON events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Turning output ON$",
+        "type": "event",
+        "extract_groups": [1],
+        "labels": ["timestamp"]
+      },
+      {
+        "name": "output_off",
+        "description": "Extract output OFF events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Turning output OFF$",
+        "type": "event",
+        "extract_groups": [1],
+        "labels": ["timestamp"]
+      },
+      {
+        "name": "cycle_start",
+        "description": "Extract power cycle start events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Starting cycle\\s*(\\d+)/(\\d+)$",
+        "type": "cycle",
+        "extract_groups": [1, 2, 3],
+        "labels": ["timestamp", "current_cycle", "total_cycles"]
+      },
+      {
+        "name": "cycle_complete",
+        "description": "Extract power cycle completion events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Cycle\\s*(\\d+)/(\\d+)\\s*completed successfully in\\s*([0-9.]+)s$",
+        "type": "cycle",
+        "extract_groups": [1, 2, 3, 4],
+        "labels": ["timestamp", "current_cycle", "total_cycles", "duration"]
+      },
+      {
+        "name": "ramp_cycle_start",
+        "description": "Extract voltage ramp cycle start events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Starting ramp cycle\\s*(\\d+)/(\\d+)$",
+        "type": "ramp_cycle",
+        "extract_groups": [1, 2, 3],
+        "labels": ["timestamp", "current_cycle", "total_cycles"]
+      },
+      {
+        "name": "ramp_cycle_complete",
+        "description": "Extract voltage ramp cycle completion events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Ramp cycle\\s*(\\d+)/(\\d+)\\s*completed successfully in\\s*([0-9.]+)s$",
+        "type": "ramp_cycle",
+        "extract_groups": [1, 2, 3, 4],
+        "labels": ["timestamp", "current_cycle", "total_cycles", "duration"]
+      },
+      {
+        "name": "voltage_step",
+        "description": "Extract voltage ramp step information",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Voltage step\\s*(\\d+):\\s*([0-9.]+)V\\s*\\(measured:\\s*([0-9.]+)V\\)$",
+        "type": "ramp_step",
+        "extract_groups": [1, 2, 3, 4],
+        "labels": ["timestamp", "step", "voltage_set", "voltage_measured"]
+      },
+      {
+        "name": "instrument_id",
+        "description": "Extract instrument identification",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Instrument identification:\\s*(.+)$",
+        "type": "info",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "instrument_id"]
+      },
+      {
+        "name": "error_event",
+        "description": "Extract error events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*ERROR:\\s*(.+)$",
+        "type": "error",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "error_message"]
+      },
+      {
+        "name": "warning_event",
+        "description": "Extract warning events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*WARNING:\\s*(.+)$",
+        "type": "warning",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "warning_message"]
+      },
+      {
+        "name": "graceful_shutdown",
+        "description": "Extract graceful shutdown events",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*Graceful shutdown completed successfully$",
+        "type": "event",
+        "extract_groups": [1],
+        "labels": ["timestamp"]
+      },
+      {
+        "name": "connection_status",
+        "description": "Extract connection status messages",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(Connected to|Reconnected to|Connection closed)\\s*(.+)$",
+        "type": "status",
+        "extract_groups": [1, 2, 3],
+        "labels": ["timestamp", "status", "resource"]
+      },
+      {
+        "name": "general_log",
+        "description": "Extract general log messages (fallback)",
+        "regex": "^\\[([0-9]{2}:[0-9]{2}:[0-9]{2})\\]\\s*(.+)$",
+        "type": "log",
+        "extract_groups": [1, 2],
+        "labels": ["timestamp", "message"]
+      }
+    ],
+    "output_formats": [
+      "json",
+      "csv",
+      "txt"
+    ],
+    "save_raw_data": true
+  },
+  "filters": {
+    "min_data_length": 1,
+    "max_data_length": 1000,
+    "exclude_patterns": [
+      "^\\s*$",
+      "^\\r?\\n$"
+    ],
+    "include_patterns": [
+      "^\\[.*\\].*$"
+    ]
+  }
+}
