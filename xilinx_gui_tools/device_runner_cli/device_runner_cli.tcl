@@ -670,7 +670,7 @@ proc init_app {} {
     
     # Clear screen and show banner
     clear_screen
-    # show_banner
+    show_banner
     
     # Initialize output directory
     if {![file exists $::output_dir]} {
@@ -853,9 +853,6 @@ proc init_app {} {
     puts "- Ready for operation"
     puts ""
     
-    
-    # Start main menu
-    # main_menu
 }
 
 # Clear screen
@@ -867,19 +864,14 @@ proc clear_screen {} {
 # Show ASCII art banner
 proc show_banner {} {
     puts ""
-    puts "    ██████╗ ███████╗██╗██╗   ██╗██╗ ███████╗███████╗"
-    puts "    ██╔══██╗██╔════╝██║██║   ██║██║██╔════╝██╔════╝"
-    puts "    ██║  ██║█████╗  ██║██║   ██║██║███████╗█████╗  "
-    puts "    ██║  ██║██╔══╝  ██║╚██╗ ██╔╝██║╚════██║██╔══╝  "
-    puts "    ██████╔╝███████╗██║ ╚████╔╝ ██║███████║███████╗"
-    puts "    ╚═════╝ ╚══════╝╚═╝  ╚═══╝  ╚═╝╚══════╝╚══════╝"
+    puts "########  ######## ##     ## ####  ######  ########     ######  ##       #### "
+    puts "##     ## ##       ##     ##  ##  ##    ## ##          ##    ## ##        ##  "
+    puts "##     ## ##       ##     ##  ##  ##       ##          ##       ##        ##  "
+    puts "##     ## ######   ##     ##  ##  ##       ######      ##       ##        ##  "
+    puts "##     ## ##        ##   ##   ##  ##       ##          ##       ##        ##  "
+    puts "##     ## ##         ## ##    ##  ##    ## ##          ##    ## ##        ##  "
+    puts "########  ########    ###    ####  ######  ########     ######  ######## #### "
     puts ""
-    puts "    ██████╗██╗     ██╗"
-    puts "   ██╔════╝██║     ██║"
-    puts "   ██║     ██║     ██║"
-    puts "   ██║     ██║     ██║"
-    puts "   ╚██████╗███████╗██║"
-    puts "    ╚═════╝╚══════╝╚═╝"
     puts ""
     puts "    FPGA Application Runner"
     puts "    Command Line Interface"
@@ -887,286 +879,6 @@ proc show_banner {} {
     puts ""
 }
 
-# Main menu
-proc main_menu {} {
-    puts "::: Main Menu :::"
-    puts "1. Run Complete Workflow"
-    puts "2. View Configuration"
-    puts "3. View Logs"
-    puts "4. Test Device Communication"
-    puts "5. Check Device Status"
-    puts "b. Build info"
-    puts "x. Exit Device Runner CLI"
-    puts ""
-    
-    while {1} {
-        puts -nonewline "Please make a selection -> "
-        flush stdout
-        set choice [gets stdin]
-        
-        switch $choice {
-            "1" {
-                run_complete_workflow
-                break
-            }
-            "2" {
-                view_configuration
-                break
-            }
-            "3" {
-                view_logs
-                break
-            }
-            "4" {
-                test_device_communication
-                break
-            }
-            "5" {
-                check_device_status_menu
-                break
-            }
-            "b" {
-                show_build_info
-                break
-            }
-            "x" {
-                exit_application
-                break
-            }
-            default {
-                puts "Invalid selection. Please try again."
-                puts ""
-            }
-        }
-    }
-}
-
-
-# Run complete workflow: Load BIT -> Configure Parameters -> Run App -> Capture RAM
-proc run_complete_workflow {} {
-    global app_path bit_file param1 param2 param3
-    set tool_ready 0
-    set tool_log_name ""
-    set tool_log_data ""
-    set tool_log_fptr 0
-    
-    # Get command line arguments
-    set cmd_args [get_cmd_args]
-
-    
-
-    clear_screen
-    show_banner
-    puts "::: Run Complete Workflow :::"
-    puts ""
-    
-    # Set default BIT file (comes with the script)
-    if {$bit_file == ""} {
-        set bit_file "default_design.bit"
-        puts "Using default BIT file: $bit_file"
-        log_message "Using default BIT file: $bit_file"
-    }
-    
-    # Set default application path (comes with the script)
-    if {$app_path == ""} {
-        set app_path "default_app.elf"
-        puts "Using default application: $app_path"
-        log_message "Using default application: $app_path"
-    }
-    
-    # Configuration is now complete with defaults
-    
-    puts "Configuration:"
-    puts "  Application: $app_path"
-    puts "  BIT file: $bit_file"
-    puts "  Architecture: $args(arch)"
-    puts "  Mode: $args(mode)"
-    puts "  Boot Mode: $args(boot_mode)"
-    puts "  Hardware Server: $args(hw_server)"
-    puts "  PS Reference Clock: $args(ps_ref_clk)"
-    puts "  Terminal Application: $args(term_app)"
-    puts "  Log Directory: $args(log_dir)"
-    if {$args(xsdb_path) != ""} {
-        puts "  XSDB Path: $args(xsdb_path)"
-    }
-    if {$args(jtag_tcp) != ""} {
-        puts "  JTAG TCP: $args(jtag_tcp)"
-    }
-    puts ""
-    
-    puts -nonewline "Start workflow? (y/[n]) -> "
-    flush stdout
-    set confirm [gets stdin]
-    
-    if {$confirm != "y" && $confirm != "Y"} {
-        puts "Workflow cancelled"
-        puts "Press any key to continue..."
-        gets stdin
-        clear_screen
-        show_banner
-        main_menu
-        return
-    }
-    
-    puts ""
-    puts "Starting complete workflow..."
-    puts "Step 1: Loading BIT file..."
-    puts "Step 2: Configuring parameters..."
-    puts "Step 3: Running application..."
-    puts "Step 4: Capturing RAM data..."
-    puts ""
-    
-    # Step 1: Load BIT file
-    puts "Step 1: Loading BIT file..."
-    log_message "Loading BIT file: $bit_file with architecture: $args(arch)"
-    log_message "Hardware server: $args(hw_server), PS ref clock: $args(ps_ref_clk)"
-    
-    # Initialize device
-    initialize_device
-    
-    # Load BIT file using device command
-    device_command "fpga -file $bit_file"
-    puts "BIT file loaded successfully"
-    puts ""
-    
-    # Step 2: Configure parameters
-    puts "Step 2: Configuring parameters..."
-    configure_parameters_inline
-    puts ""
-    
-    # Step 3: Run application
-    puts "Step 3: Running application..."
-    set formatted_params [DeviceRunnerCLI::format_integer_params $param1 $param2 $param3]
-    log_message "Running application: $app_path with params: $formatted_params"
-    log_message "Mode: $args(mode), Terminal app: $args(term_app)"
-    puts "Application completed successfully"
-    puts ""
-    
-    # Step 4: Capture RAM data
-    puts "Step 4: Capturing RAM data..."
-    log_message "Capturing RAM data with params: $formatted_params"
-    log_message "Log directory: $args(log_dir)"
-    puts "RAM data captured successfully"
-    puts ""
-    
-    puts "Workflow completed successfully!"
-    puts "Results saved to: $::output_dir"
-    puts "Logs saved to: $args(log_dir)"
-    puts ""
-    puts "Press any key to continue..."
-    gets stdin
-    clear_screen
-    show_banner
-    main_menu
-
-    # Quit application
-}
-
-# Configure parameters inline during workflow
-proc configure_parameters_inline {} {
-    global param1 param2 param3
-    
-    # Parameter 1 - Menu selection
-    puts "Parameter 1 - Select option:"
-    puts "1. Short"
-    puts "2. Medium"
-    puts "3. Tall"
-    puts ""
-    puts -nonewline "Parameter 1 selection (1-3) -> "
-    flush stdout
-    set choice [gets stdin]
-    
-    switch $choice {
-        "1" {
-            set param1 "0x00000001"
-            puts "Parameter 1 set to: Short (0x00000001)"
-        }
-        "2" {
-            set param1 "0x00000002"
-            puts "Parameter 1 set to: Medium (0x00000002)"
-        }
-        "3" {
-            set param1 "0x00000003"
-            puts "Parameter 1 set to: Tall (0x00000003)"
-        }
-        default {
-            puts "Invalid selection. Parameter 1 not changed."
-        }
-    }
-    
-    puts ""
-    
-    # Parameter 2
-    puts "Parameter 2 - Enter hexadecimal value:"
-    puts -nonewline "Parameter 2 (e.g., 0x43C00000) -> "
-    flush stdout
-    set new_param2 [gets stdin]
-    
-    if {$new_param2 != ""} {
-        if {[regexp {^0x[0-9A-Fa-f]{1,8}$} $new_param2]} {
-            set param2 $new_param2
-            puts "Parameter 2 set to: $param2"
-        } else {
-            puts "ERROR: Invalid hexadecimal format. Use 0x followed by up to 8 hex digits."
-        }
-    }
-    
-    puts ""
-    
-    # Parameter 3
-    puts "Parameter 3 - Enter hexadecimal value:"
-    puts -nonewline "Parameter 3 (e.g., 0x00001000) -> "
-    flush stdout
-    set new_param3 [gets stdin]
-    
-    if {$new_param3 != ""} {
-        if {[regexp {^0x[0-9A-Fa-f]{1,8}$} $new_param3]} {
-            set param3 $new_param3
-            puts "Parameter 3 set to: $param3"
-        } else {
-            puts "ERROR: Invalid hexadecimal format. Use 0x followed by up to 8 hex digits."
-        }
-    }
-    
-    log_message "Parameters configured: P1=$param1, P2=$param2, P3=$param3"
-}
-
-# View configuration
-proc view_configuration {} {
-    global app_path bit_file param1 param2 param3
-    
-    # Get command line arguments
-    set cmd_args [get_cmd_args]
-    array set args $cmd_args
-    
-    clear_screen
-    show_banner
-    puts "::: Current Configuration :::"
-    puts ""
-    puts "Application Configuration:"
-    puts "  Application Path: [expr {$app_path != "" ? $app_path : "Not configured"}]"
-    puts "  BIT File: [expr {$bit_file != "" ? $bit_file : "Not configured"}]"
-    puts "  Parameter 1: [expr {$param1 != "" ? $param1 : "Not configured"}]"
-    puts "  Parameter 2: [expr {$param2 != "" ? $param2 : "Not configured"}]"
-    puts "  Parameter 3: [expr {$param3 != "" ? $param3 : "Not configured"}]"
-    puts ""
-    puts "Command Line Arguments:"
-    puts "  Architecture: $args(arch)"
-    puts "  Mode: $args(mode)"
-    puts "  Boot Mode: $args(boot_mode)"
-    puts "  Hardware Server: $args(hw_server)"
-    puts "  PS Reference Clock: $args(ps_ref_clk)"
-    puts "  Terminal Application: $args(term_app)"
-    puts "  Log Directory: $args(log_dir)"
-    puts "  XSDB Path: [expr {$args(xsdb_path) != "" ? $args(xsdb_path) : "Not configured"}]"
-    puts "  JTAG TCP: [expr {$args(jtag_tcp) != "" ? $args(jtag_tcp) : "Not configured"}]"
-    puts ""
-    puts "Press any key to continue..."
-    gets stdin
-    clear_screen
-    show_banner
-    main_menu
-}
 
 # View logs
 proc view_logs {} {
@@ -1202,32 +914,8 @@ proc view_logs {} {
     gets stdin
     clear_screen
     show_banner
-    main_menu
 }
 
-# Show build info
-proc show_build_info {} {
-    clear_screen
-    show_banner
-    puts "::: Build Information :::"
-    puts ""
-    puts "Device Runner CLI v$::version"
-    puts "Built with Tcl/Tk"
-    puts "Command Line Interface"
-    puts ""
-    puts "Features:"
-    puts "- Menu-driven interface"
-    puts "- ASCII art banner"
-    puts "- Configuration management"
-    puts "- Workflow execution"
-    puts "- Logging system"
-    puts ""
-    puts "Press any key to continue..."
-    gets stdin
-    clear_screen
-    show_banner
-    main_menu
-}
 
 # Exit application
 proc exit_application {} {
