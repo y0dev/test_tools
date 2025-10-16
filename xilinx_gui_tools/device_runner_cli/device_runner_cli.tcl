@@ -2,14 +2,26 @@
 # Device Runner CLI - Command Line Interface
 # Text-based interface similar to XLWP tool
 
-package require Tcl 8.6
-
 # Global variables
 set ::app_name "Device Runner CLI"
 set ::version "2.0.0"
 set ::output_dir "output"
 set ::log_file ""
 set ::console_widget ""
+
+
+set tool_script   ""
+set tool_tcl_chan_id 0
+set tool_ready 0
+set tool_log_name ""
+set tool_log_data ""
+set tool_log_fptr 0
+set tool_response ""
+set tool_error ""
+
+# list of currently supported ps_ref_clk frequencies
+set ::ps_ref_clks  {27 33 50 60}
+
 
 # Application state
 set ::app_path ""
@@ -19,19 +31,20 @@ set ::param2 ""
 set ::param3 ""
 set ::xsdb_path ""
 set ::jtag_tcp ""
+set ::clk_elf_file ""
 
 # Command line arguments
 set ::arch          "zynq"
 set ::mode          "user"
 set ::boot_mode     "jtag"
 set ::hw_server     "localhost"
-set ::ps_ref_clk    "0"
+set ::ps_ref_clk    0
 set ::term_app      "device_runner_term.bat"
 set ::log_dir       "logs"
 
 # Parse command line arguments and return as array
 proc parse_command_line_args {} {
-    global argv
+    global argv ps_ref_clks
     
     # Default values
     set args_array(arch)          "zynq"
@@ -41,8 +54,12 @@ proc parse_command_line_args {} {
     set args_array(ps_ref_clk)    "0"
     set args_array(term_app)      "device_runner_term.bat"
     set args_array(log_dir)       "logs"
-    set args_array(xsdb_path)     ""
-    set args_array(jtag_tcp)      ""
+    set args_array(tool_script)   ""
+    set args_array(clk_elf_file)  ""
+
+    # default filename values
+    set clk_elf_file                ""
+    set script_cmds                 "zup_cmds.tcl"
     
     # Parse command line arguments
     for {set i 0} {$i < [llength $argv]} {incr i} {
@@ -53,6 +70,16 @@ proc parse_command_line_args {} {
                 incr i
                 if {$i < [llength $argv]} {
                     set args_array(arch) [lindex $argv $i]
+                    # check for valid device type
+                    switch  -nocase $args_array(arch)  {
+                        "zynqmp" {
+                            # valid
+                        }
+                        default { # versal and other new families added in future
+                            puts " ERROR: Invalid architecture: $args_array(arch)"
+                            return 1
+                        }
+                    }
                     log_message "Architecture set to: $args_array(arch)"
                 }
             }
@@ -60,6 +87,17 @@ proc parse_command_line_args {} {
                 incr i
                 if {$i < [llength $argv]} {
                     set args_array(mode) [lindex $argv $i]
+                    # check for valid run mode
+                    switch  -nocase $args_array(mode) {
+                        "user" - 
+                        "script" {
+                            # valid
+                        }
+                        default { # invalid run mode
+                            puts " ERROR: Invalid execution mode: $args_array(mode)"
+                            return 1
+                        }
+                    }
                     log_message "Mode set to: $args_array(mode)"
                 }
             }
@@ -67,13 +105,25 @@ proc parse_command_line_args {} {
                 incr i
                 if {$i < [llength $argv]} {
                     set args_array(boot_mode) [lindex $argv $i]
+                    # check for valid boot mode
+                    switch  -nocase $args_array(boot_mode) {
+                        "jtag" - 
+                        "other" {
+                            # valid
+                        }
+                        default { # invalid boot mode
+                            puts " ERROR: Invalid boot mode: $args_array(boot_mode)"
+                            return 1
+                        }
+                    }
                     log_message "Boot mode set to: $args_array(boot_mode)"
                 }
             }
             "-hw_server" {
                 incr i
                 if {$i < [llength $argv]} {
-                    set args_array(hw_server) [lindex $argv $i]
+                    set hw_server_host [lindex $argv $i]
+                    set args_array(hw_server) [regsub ":3121" $hw_server_host ""]
                     log_message "Hardware server set to: $args_array(hw_server)"
                 }
             }
@@ -98,18 +148,11 @@ proc parse_command_line_args {} {
                     log_message "Log directory set to: $args_array(log_dir)"
                 }
             }
-            "-xsdb_path" {
+            "-tool_script" {
                 incr i
                 if {$i < [llength $argv]} {
-                    set args_array(xsdb_path) [lindex $argv $i]
-                    log_message "XSDB path set to: $args_array(xsdb_path)"
-                }
-            }
-            "-jtag_tcp" {
-                incr i
-                if {$i < [llength $argv]} {
-                    set args_array(jtag_tcp) [lindex $argv $i]
-                    log_message "JTAG TCP set to: $args_array(jtag_tcp)"
+                    set set args_array(tool_script) [lindex $argv $i]
+                    log_message "Tool Script set to: $args_array(tool_script)"
                 }
             }
             "-help" {
@@ -125,6 +168,18 @@ proc parse_command_line_args {} {
         }
     }
     
+    # make sure it's a valid ps ref clock frequency
+    if {[lsearch -exact $ps_ref_clks $args_array(ps_ref_clk)] < 0} {
+        puts " ERROR: Invalid PS_REF_CLK: $args_array(ps_ref_clk) MHz"
+        puts "        Value must match external PS_REF_CLK frequency!!"
+        puts "        Valid values: [join $ps_ref_clks ", "] MHz"
+        return 1
+    }
+
+    # Construct the .elf filename based on ps ref clk freq value
+    set clk_elf_file "tool_zup_${args_array(ps_ref_clk)}mhz.elf"
+    set args_array(clk_elf_file) $clk_elf_file
+    
     # Set global variables for backward compatibility
     set ::arch $args_array(arch)
     set ::mode $args_array(mode)
@@ -133,10 +188,10 @@ proc parse_command_line_args {} {
     set ::ps_ref_clk $args_array(ps_ref_clk)
     set ::term_app $args_array(term_app)
     set ::log_dir $args_array(log_dir)
-    set ::xsdb_path $args_array(xsdb_path)
-    set ::jtag_tcp $args_array(jtag_tcp)
-    
+    set ::clk_elf_file $args_array(clk_elf_file)
+
     return [array get args_array]
+
 }
 
 # Get command line arguments as array
@@ -169,64 +224,130 @@ proc get_cmd_arg {arg_name} {
     }
 }
 
+############################################################################
+# proc: Puts function sends to stdout (and file if logging is on)          #
+############################################################################
+proc tool_puts {str {nonewline 0}} {
+    global tool_log_fptr
+
+    # send to stdout
+    if {$nonewline == 1} {
+        puts -nonewline $str
+        flush stdout
+    } else {
+        puts $str
+    }
+
+    if {$tool_log_fptr != 0} {
+        # write to log file
+        if {$nonewline == 1} {
+            puts -nonewline $tool_log_fptr $str
+            flush $tool_log_fptr
+        } else {
+            puts $tool_log_fptr $str
+        }
+    }
+}
+
+
+############################################################################
+# proc: re-direct a tcp socket data to stdout                              #
+############################################################################
+proc tcp_socket_to_stdout {tcl_chan_id} {
+    global tool_ready
+    global tool_log_name
+    global tool_log_data
+    global tool_response
+    global tool_error
+
+    #tool_puts "\n--> redirect stdout entry" 1
+    # get data from tool
+    set str [read $tcl_chan_id 1000]
+
+    # remove   characters if they appear
+    set str [string map {" " ""} $str]
+
+    # update log data string
+    set tool_log_data $tool_log_data$str
+
+    # look for the error keyword, if found exit immediately
+    if {[string first "ERROR" $str] >= 0} {
+        set tool_error 1
+        # re-direct data to stdout (and possibly a log file)
+        # without the '@xlwp' response indicator
+        tool_puts [regsub "@xlwp" $str ""] 1
+        tool_puts "\n\n XLWP reported an ERROR after the last command!" 1
+        quit_tool 1
+    } else {
+        set tool_error 0
+    }
+    # look for device dna message and capture value if in logging script mode
+    if {$xlwp_log_name == "lsm"} {
+        if {([string first "device PS DNA" $str] >= 0)} {
+            # remove any trailing white space
+            set trim_str [string trim $str]
+            if {([string length $trim_str] >= 24)} {
+                set xlwp_log_name [string range $trim_str [expr \
+                                   [string length $trim_str] - 24] end]
+                # don't send to stdout, just return
+                return 0
+            }
+        }
+    }
+    # look for xlwp init done indicator
+    if {([string first "start XLWP tool -> " $str] >= 0) || 
+        ([string first "start the ZU+ XLWP tool -> " $str] >= 0)} {
+        set xlwp_ready 1
+    }
+    # look for xlwp response indicator (echoed write value)
+    if {[string first "@xlwp" $str] >= 0} {
+        set xlwp_response [regsub "@xlwp" [string trim $str] ""]
+    }
+    # re-direct data to stdout (and possibly a log file)
+    # without the '@xlwp' response indicator
+    tool_puts [regsub "@xlwp" $str ""] 1
+    #tool_puts "\n<-- redirect stdout exit" 1
+}
+
 # Device communication functions
-proc device_command {command {timeout 5000} {retries 3}} {
+proc device_command {command {ret_main 1} {chk_error 1}} {
     global log_file
+    global tool_tcl_chan_id
+    global tcl_error
+
+    set response ""
     
     # Log the command
     log_message "Device Command: $command"
-    
-    # Simulate device command execution
-    # In real implementation, this would send command to actual device
-    puts "Sending command to device: $command"
-    
-    # Simulate response based on command type
-    set response ""
-    switch -glob $command {
-        "!esp!" {
-            set response "Device placed into script mode"
-            log_message "Device Response: $response"
-        }
-        "connect*" {
-            set response "Connected to target device"
-            log_message "Device Response: $response"
-        }
-        "targets*" {
-            set response "Target device found and ready"
-            log_message "Device Response: $response"
-        }
-        "rst*" {
-            set response "Device reset completed"
-            log_message "Device Response: $response"
-        }
-        "run*" {
-            set response "Application started successfully"
-            log_message "Device Response: $response"
-        }
-        "stop*" {
-            set response "Application stopped"
-            log_message "Device Response: $response"
-        }
-        "mrd*" {
-            set response "Memory read completed"
-            log_message "Device Response: $response"
-        }
-        "mwr*" {
-            set response "Memory write completed"
-            log_message "Device Response: $response"
-        }
-        "source*" {
-            set response "TCL script executed successfully"
-            log_message "Device Response: $response"
-        }
-        default {
-            set response "Command executed: $command"
-            log_message "Device Response: $response"
-        }
+
+    # force return to the main menu
+    if {$ret_main == 1} {
+        puts -nonewline $tool_tcl_chan_id "n~xxxxn"
+        flush $tool_tcl_chan_id
     }
-    
-    # Simulate processing delay
-    after 100
+
+    # check for error
+    if {$chk_error == 1} {
+        # set up a timeout script
+        set cancel_id [after 5000 { 
+            tool_puts "\n ERROR: No data from XLWP error checker!"
+            quit_tool 1
+        }]
+        
+        # send the command with error checking on
+        puts -nonewline $tool_tcl_chan_id $command
+        flush $tool_tcl_chan_id
+
+        # wait for the xlwp error check to get updated
+        vwait tcl_error
+
+        # cancel the timeout script since we got a response
+        after cancel $cancel_id
+    } else {
+        # send the command with error checking off
+        puts -nonewline $tool_tcl_chan_id $command
+        flush $tool_tcl_chan_id
+    }
     
     return $response
 }
@@ -406,53 +527,41 @@ proc conn_device {hw_server_host} {
     global log_file
     
     log_message "Connecting to device: $hw_server_host"
-    puts "Connecting to device: $hw_server_host"
+    puts "\n\nConnecting to device  : $hw_server_host"
 
     flush stdout
     
     # Step 1: Connect to hardware server
     puts "Step 1: Connecting to hardware server..."
-    set connect_cmd "connect -url $hw_server_host"
     while {[catch {connect -host $hw_server_host -port 3121}]} {
         puts -nonewline "."
         flush stdout
         after 2000
     }
-    set response [device_command $connect_cmd]
-    puts "Connection response: $response"
     
     # Step 2: List available targets
     puts "Step 2: Listing available targets..."
-    set targets_response [device_command "targets"]
-    puts "Available targets: $targets_response"
+    targets -set -nocase -filter {name =~"PSU*"}
+    
     
     # Step 3: Reset all cores
-    puts "Step 3: Resetting all cores..."
-    set reset_response [device_command "rst -system"]
-    puts "Reset response: $reset_response"
+    puts "Step 3: Resetting PSU..."
+    rst -system
+    after 1000
     
     # Step 4: Connect to target a53_0
     puts "Step 4: Connecting to target a53_0..."
-    set target_cmd "targets -set -filter {name =~ \"*a53*\"}"
-    set target_response [device_command $target_cmd]
-    puts "Target connection response: $target_response"
+    targets -set -nocase -filter {name =~ "*a53*#0"}
     
     # Step 5: Verify target is ready
-    puts "Step 5: Verifying target readiness..."
-    set verify_response [device_command "targets"]
-    if {[string match "*a53*" $verify_response]} {
-        puts "Target a53_0 is ready and connected"
-        log_message "Successfully connected to target a53_0"
-        return 1
-    } else {
-        puts "ERROR: Failed to connect to target a53_0"
-        log_message "ERROR: Failed to connect to target a53_0"
-        return 0
-    }
+    rst -processor
 }
 
 # Read device DNA for log filename
-proc read_device_dna {timeout} {
+proc read_device_dna {enable} {
+    if {$enable == 1} {
+        device_command "11." 1 0
+    }
     global log_file log_filename tool_ready
     
     log_message "Reading device DNA with timeout: ${timeout}s"
@@ -561,7 +670,7 @@ proc init_app {} {
     
     # Clear screen and show banner
     clear_screen
-    show_banner
+    # show_banner
     
     # Initialize output directory
     if {![file exists $::output_dir]} {
@@ -570,200 +679,9 @@ proc init_app {} {
     
     # Initialize log file
     set ::log_file [file join $::output_dir "device_runner_cli.log"]
-    
-    # Show initialization
-    puts "Starting Device Runner CLI initialization:"
-    puts "- Initializing output directory..."
-    puts "- Setting up logging system..."
-    puts "- Loading helper functions..."
-    puts "- Parsing command line arguments..."
-    puts "- Ready for operation"
-    puts ""
-    
-    # Start main menu
-    main_menu
-}
 
-# Clear screen
-proc clear_screen {} {
-    # Clear screen (works on most terminals)
-    puts "\033\[2J\033\[H"
-}
-
-# Show ASCII art banner
-proc show_banner {} {
-    puts ""
-    puts "    ██████╗ ███████╗██╗██╗   ██╗██╗ ███████╗███████╗"
-    puts "    ██╔══██╗██╔════╝██║██║   ██║██║██╔════╝██╔════╝"
-    puts "    ██║  ██║█████╗  ██║██║   ██║██║███████╗█████╗  "
-    puts "    ██║  ██║██╔══╝  ██║╚██╗ ██╔╝██║╚════██║██╔══╝  "
-    puts "    ██████╔╝███████╗██║ ╚████╔╝ ██║███████║███████╗"
-    puts "    ╚═════╝ ╚══════╝╚═╝  ╚═══╝  ╚═╝╚══════╝╚══════╝"
-    puts ""
-    puts "    ██████╗██╗     ██╗"
-    puts "   ██╔════╝██║     ██║"
-    puts "   ██║     ██║     ██║"
-    puts "   ██║     ██║     ██║"
-    puts "   ╚██████╗███████╗██║"
-    puts "    ╚═════╝╚══════╝╚═╝"
-    puts ""
-    puts "    FPGA Application Runner"
-    puts "    Command Line Interface"
-    puts "    Device Runner CLI v$::version"
-    puts ""
-}
-
-# Main menu
-proc main_menu {} {
-    puts "::: Main Menu :::"
-    puts "1. Configure Application"
-    puts "2. Configure BIT File"
-    puts "3. Run Complete Workflow"
-    puts "4. View Configuration"
-    puts "5. View Logs"
-    puts "6. Test Device Communication"
-    puts "7. Check Device Status"
-    puts "b. Build info"
-    puts "x. Exit Device Runner CLI"
-    puts ""
-    
-    while {1} {
-        puts -nonewline "Please make a selection -> "
-        flush stdout
-        set choice [gets stdin]
-        
-        switch $choice {
-            "1" {
-                configure_application
-                break
-            }
-            "2" {
-                configure_bit_file
-                break
-            }
-            "3" {
-                run_complete_workflow
-                break
-            }
-            "4" {
-                view_configuration
-                break
-            }
-            "5" {
-                view_logs
-                break
-            }
-            "6" {
-                test_device_communication
-                break
-            }
-            "7" {
-                check_device_status_menu
-                break
-            }
-            "b" {
-                show_build_info
-                break
-            }
-            "x" {
-                exit_application
-                break
-            }
-            default {
-                puts "Invalid selection. Please try again."
-                puts ""
-            }
-        }
-    }
-}
-
-# Configure application
-proc configure_application {} {
-    global app_path
-    
-    clear_screen
-    show_banner
-    puts "::: Configure Application :::"
-    puts ""
-    
-    if {$app_path != ""} {
-        puts "Current application: $app_path"
-        puts ""
-    }
-    
-    puts "Enter application path (or press Enter to keep current):"
-    puts -nonewline "Application path -> "
-    flush stdout
-    set new_path [gets stdin]
-    
-    if {$new_path != ""} {
-        if {[file exists $new_path]} {
-            set app_path $new_path
-            puts "Application path set to: $app_path"
-            log_message "Application path configured: $app_path"
-        } else {
-            puts "ERROR: File does not exist: $new_path"
-        }
-    }
-    
-    puts ""
-    puts "Press any key to continue..."
-    gets stdin
-    clear_screen
-    show_banner
-    main_menu
-}
-
-# Configure BIT file
-proc configure_bit_file {} {
-    global bit_file
-    
-    clear_screen
-    show_banner
-    puts "::: Configure BIT File :::"
-    puts ""
-    
-    if {$bit_file != ""} {
-        puts "Current BIT file: $bit_file"
-        puts ""
-    }
-    
-    puts "Enter BIT file path (or press Enter to keep current):"
-    puts -nonewline "BIT file path -> "
-    flush stdout
-    set new_path [gets stdin]
-    
-    if {$new_path != ""} {
-        if {[file exists $new_path]} {
-            set bit_file $new_path
-            puts "BIT file path set to: $bit_file"
-            log_message "BIT file path configured: $bit_file"
-        } else {
-            puts "ERROR: File does not exist: $new_path"
-        }
-    }
-    
-    puts ""
-    puts "Press any key to continue..."
-    gets stdin
-    clear_screen
-    show_banner
-    main_menu
-}
-
-
-# Run complete workflow: Load BIT -> Configure Parameters -> Run App -> Capture RAM
-proc run_complete_workflow {} {
-    global app_path bit_file param1 param2 param3
-    set tool_ready 0
-    set tool_log_name ""
-    set tool_log_data ""
-    set tool_log_fptr 0
-    
-    # Get command line arguments
-    set cmd_args [get_cmd_args]
-    
     if {($cmd_args == 0) || ($cmd_args ==1)} {
+        show_help
         exit $cmd_args
     } else {
         # Extract all command line arguments into individual variables
@@ -775,22 +693,23 @@ proc run_complete_workflow {} {
         set boot_mode $args(boot_mode)
         set hw_server $args(hw_server)
         set ps_ref_clk $args(ps_ref_clk)
+        set app_elf $args(clk_elf_file)
         set term_app $args(term_app)
         set log_dir $args(log_dir)
-        set xsdb_path $args(xsdb_path)
-        set jtag_tcp $args(jtag_tcp)
         
-        puts "Xilinx Device type: $arch"
-        puts "Mode: $mode"
-        puts "Boot mode: $boot_mode"
-        puts "Hardware server: $hw_server"
-        puts "PS reference clock: $ps_ref_clk"
-        puts "Log directory: $log_dir"
-        if {$xsdb_path != ""} {
-            puts "XSDB path: $xsdb_path"
-        }
-        if {$jtag_tcp != ""} {
-            puts "JTAG TCP: $jtag_tcp"
+        puts "Xilinx Device type    : $arch"
+        puts "Mode                  : $mode"
+        puts "Boot mode             : $boot_mode"
+        puts "Hardware server       : $hw_server"
+        puts "PS reference clock    : $ps_ref_clk MHz"
+        puts "Log directory         : $log_dir"
+
+        if {$mode == "script"} {
+            puts "Commands Filename    : $xlwp_cmds"
+            if {[catch {source $xlwp_cmds}]} {
+                puts "\nERROR: could not open commands file: $xlwp_cmds"
+                exit 1
+            }
         }
 
         # Check for mode
@@ -802,33 +721,32 @@ proc run_complete_workflow {} {
             }
             puts "Script mode: Using script file $term_app"
         } elseif {$mode == "user"} {
-            puts "User mode: Interactive operation"
-            puts "Terminal Application: $term_app"
+            puts "User mode             : Interactive operation"
+            puts "Terminal Application  : $term_app"
         } else {
             puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
             exit 1
         }
     }
 
-
     # Determine Operating System
-    set op_sys [lindex $tcl_platform(os) 0]
+    # set op_sys [lindex $tcl_platform(os) 0]
     
     # Check if OS is supported (Windows or Linux)
-    if {[string match -nocase "*windows*" $op_sys]} {
-        puts "Operating System: Windows - Supported"
-    } elseif {[string match -nocase "*linux*" $op_sys]} {
-        puts "Operating System: Linux - Supported"
-        set term_app "./${term_app}"
-    } else {
-        puts "ERROR: Unsupported operating system: $op_sys"
-        puts "This tool only supports Windows and Linux"
-        exit 1
-    }
+    # if {[string match -nocase "*windows*" $op_sys]} {
+        # puts "Operating System: Windows - Supported"
+    # } elseif {[string match -nocase "*linux*" $op_sys]} {
+        # puts "Operating System: Linux - Supported"
+        # set term_app "./${term_app}"
+    # } else {
+        # puts "ERROR: Unsupported operating system: $op_sys"
+        # puts "This tool only supports Windows and Linux"
+        # exit 1
+    # }
 
     # Connect to device, reset cores and connect to target a53_0
-    conn_device $hw_server_host
-    
+    conn_device $hw_server
+
     # Get the tcp port number to communicate with device via uart/jtag
     set tcp_port_num [jtagterminal -socket]
     puts "TCP port number: $tcp_port_num"
@@ -866,7 +784,7 @@ proc run_complete_workflow {} {
         fconfigure $tcl_chan_id -buffering none -blocking 0 t-translation auto
 
         puts "Setting up stdout fileevent..."
-        fileevent $tcl_chan_id readable "TcpSocketToStdout $tcl_chan_id"
+        fileevent $tcl_chan_id readable "tcp_socket_to_stdout $tcl_chan_id"
 
         if {$boot_mode == "jtag"} {
             puts "Downloading Device Application .elf file"
@@ -925,6 +843,117 @@ proc run_complete_workflow {} {
         log_message "ERROR: Invalid mode '$mode'"
         exit 1
     }
+    
+    # Show initialization
+    puts "\n\nStarting Device Runner CLI initialization:"
+    puts "- Initializing output directory..."
+    puts "- Setting up logging system..."
+    puts "- Loading helper functions..."
+    puts "- Parsing command line arguments..."
+    puts "- Ready for operation"
+    puts ""
+    
+    
+    # Start main menu
+    # main_menu
+}
+
+# Clear screen
+proc clear_screen {} {
+    # Clear screen (works on most terminals)
+    puts "\033\[2J\033\[H"
+}
+
+# Show ASCII art banner
+proc show_banner {} {
+    puts ""
+    puts "    ██████╗ ███████╗██╗██╗   ██╗██╗ ███████╗███████╗"
+    puts "    ██╔══██╗██╔════╝██║██║   ██║██║██╔════╝██╔════╝"
+    puts "    ██║  ██║█████╗  ██║██║   ██║██║███████╗█████╗  "
+    puts "    ██║  ██║██╔══╝  ██║╚██╗ ██╔╝██║╚════██║██╔══╝  "
+    puts "    ██████╔╝███████╗██║ ╚████╔╝ ██║███████║███████╗"
+    puts "    ╚═════╝ ╚══════╝╚═╝  ╚═══╝  ╚═╝╚══════╝╚══════╝"
+    puts ""
+    puts "    ██████╗██╗     ██╗"
+    puts "   ██╔════╝██║     ██║"
+    puts "   ██║     ██║     ██║"
+    puts "   ██║     ██║     ██║"
+    puts "   ╚██████╗███████╗██║"
+    puts "    ╚═════╝╚══════╝╚═╝"
+    puts ""
+    puts "    FPGA Application Runner"
+    puts "    Command Line Interface"
+    puts "    Device Runner CLI v$::version"
+    puts ""
+}
+
+# Main menu
+proc main_menu {} {
+    puts "::: Main Menu :::"
+    puts "1. Run Complete Workflow"
+    puts "2. View Configuration"
+    puts "3. View Logs"
+    puts "4. Test Device Communication"
+    puts "5. Check Device Status"
+    puts "b. Build info"
+    puts "x. Exit Device Runner CLI"
+    puts ""
+    
+    while {1} {
+        puts -nonewline "Please make a selection -> "
+        flush stdout
+        set choice [gets stdin]
+        
+        switch $choice {
+            "1" {
+                run_complete_workflow
+                break
+            }
+            "2" {
+                view_configuration
+                break
+            }
+            "3" {
+                view_logs
+                break
+            }
+            "4" {
+                test_device_communication
+                break
+            }
+            "5" {
+                check_device_status_menu
+                break
+            }
+            "b" {
+                show_build_info
+                break
+            }
+            "x" {
+                exit_application
+                break
+            }
+            default {
+                puts "Invalid selection. Please try again."
+                puts ""
+            }
+        }
+    }
+}
+
+
+# Run complete workflow: Load BIT -> Configure Parameters -> Run App -> Capture RAM
+proc run_complete_workflow {} {
+    global app_path bit_file param1 param2 param3
+    set tool_ready 0
+    set tool_log_name ""
+    set tool_log_data ""
+    set tool_log_fptr 0
+    
+    # Get command line arguments
+    set cmd_args [get_cmd_args]
+
+    
 
     clear_screen
     show_banner
@@ -1216,6 +1245,87 @@ proc exit_application {} {
         show_banner
         main_menu
     }
+}
+
+############################################################################
+# proc: quit tool tool                                                     #
+############################################################################
+proc quit_tool {exit_code} {
+    global tool_tcl_chan_id
+    global tool_script
+    global tool_log_name
+    global tool_log_data
+    global tool_log_fptr
+    global tool_ready
+
+    if {$tool_ready == 1} {
+        set tool_ready 0
+        # send the tool exit command
+        XlwpCommand "xy" 1 0
+        XlwpResponse "Exiting XLWP tool"
+    }
+    # delete the event handler
+    fileevent $tool_tcl_chan_id readable ""
+    # determine exit message
+    if {$exit_code == 1} {
+        set exit_msg "with ERRORS"
+    } else {
+        set exit_msg "OK"
+    }
+    # finish writing to screen (and possibly the log)
+    tool_puts "\n XLWP script finished ${exit_msg}: [string toupper \
+              [clock format [clock seconds] -format "%d-%b-%Y %H:%M:%S"]]"
+    tool_puts "\n------------------ Script end:\
+              [file tail $tool_script] ------------------\n"
+    # check if logging is on
+    if {$tool_log_name != ""} {
+        # close the log file if it was opened
+        if {$tool_log_fptr != 0} { 
+            puts " Closing script-mode log file: [file tail $tool_log_name]"
+            flush $tool_log_fptr 
+            close $tool_log_fptr 
+        }
+        # look for puf_file tag in the log data, write to file if it exists
+        set tag_loc [string first "\[puf_file]:" $tool_log_data]
+        if {$tag_loc >= 0} {
+            set puf_file "[file dirname $tool_log_name]/[regsub {\.log} \
+                          [file tail $tool_log_name] ""]_puf_file.txt"
+            set puf_file_fptr [open $puf_file w]
+            puts -nonewline $puf_file_fptr [string trim [regsub -all " " \
+                                 [string range $tool_log_data \
+                                  [expr $tag_loc + 78] \
+                                  [expr $tag_loc + 3262]] ""]]
+            flush $puf_file_fptr
+            close $puf_file_fptr
+        }
+        # look for bh_key_iv tag in the log data, write to file if it exists
+        set tag_loc [string first "\[bh_key_iv]:" $tool_log_data]
+        if {$tag_loc >= 0} {
+            set bh_key_iv "[file dirname $tool_log_name]/[regsub {\.log} \
+                           [file tail $tool_log_name] ""]_bh_key_iv.txt"
+            set bh_key_iv_fptr [open $bh_key_iv w]
+            puts -nonewline $bh_key_iv_fptr [string trim [regsub -all " " \
+                                  [string range $tool_log_data \
+                                   [expr $tag_loc + 40] \
+                                   [expr $tag_loc + 65]] ""]]
+            flush $bh_key_iv_fptr
+            close $bh_key_iv_fptr
+        }
+        # look for bh_keyfile tag in the log data, write to file if it exists
+        set tag_loc [string first "\[bh_keyfile]:" $tool_log_data]
+        if {$tag_loc >= 0} {
+            set bh_keyfile "[file dirname $tool_log_name]/[regsub {\.log} \
+                            [file tail $tool_log_name] ""]_bh_keyfile.txt"
+            set bh_keyfile_fptr [open $bh_keyfile w]
+            puts -nonewline $bh_keyfile_fptr [string trim [regsub -all " " \
+                                   [string range $tool_log_data \
+                                    [expr $tag_loc + 80] \
+                                    [expr $tag_loc + 145]] ""]]
+            flush $bh_keyfile_fptr
+            close $bh_keyfile_fptr
+        }
+    }
+    exit $exit_code
 }
 
 # Log message
