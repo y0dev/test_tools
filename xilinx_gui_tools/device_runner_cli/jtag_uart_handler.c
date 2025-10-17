@@ -68,6 +68,8 @@ static void handle_get_status_command(void);
 static void handle_capture_ram_command(void);
 static void handle_exit_command(void);
 static void handle_help_command(void);
+static void handle_output_data_command(void);
+static void handle_device_dna_command(void);
 static void print_banner(void);
 static void delay_us(uint32_t delay);
 static void show_main_menu(void);
@@ -320,7 +322,72 @@ static void handle_help_command(void) {
     xil_printf("Handling HELP command\r\n");
     
     /* Send help information */
-    send_response("HELP: Available commands: init, run_app, set_param, get_status, capture_ram, exit, help");
+    send_response("HELP: Available commands: init, run_app, set_param, get_status, capture_ram, output_data, device_dna, exit, help");
+}
+
+/*
+* Handle OUTPUT_DATA Command
+* @return: void
+*/
+static void handle_output_data_command(void) {
+    xil_printf("Handling OUTPUT_DATA command\r\n");
+    
+    /* Output application data */
+    xil_printf("=== Application Data Output ===\r\n");
+    xil_printf("Parameters Used:\r\n");
+    xil_printf("  Param1 (Height): 0x%08X\r\n", param1);
+    xil_printf("  Param2 (Base):   0x%08X\r\n", param2);
+    xil_printf("  Param3 (Size):   0x%08X\r\n", param3);
+    xil_printf("\r\n");
+    xil_printf("Application Status: %s\r\n", app_status);
+    xil_printf("\r\n");
+    xil_printf("Simulated Data Output:\r\n");
+    xil_printf("  Memory Region: 0x%08X - 0x%08X\r\n", param2, param2 + param3 - 1);
+    xil_printf("  Data Size: %d bytes\r\n", param3);
+    xil_printf("  Data Format: 32-bit words\r\n");
+    xil_printf("\r\n");
+    
+    /* Simulate data output */
+    xil_printf("Data Values:\r\n");
+    for (int i = 0; i < 8 && i < (param3 / 4); i++) {
+        uint32_t addr = param2 + (i * 4);
+        uint32_t value = 0x12345678 + (i * 0x11111111);
+        xil_printf("  0x%08X: 0x%08X\r\n", addr, value);
+    }
+    if (param3 > 32) {
+        xil_printf("  ... (showing first 8 values)\r\n");
+    }
+    
+    /* Send response */
+    send_response(RESPONSE_OK);
+}
+
+/*
+* Handle DEVICE_DNA Command
+* @return: void
+*/
+static void handle_device_dna_command(void) {
+    xil_printf("Handling DEVICE_DNA command\r\n");
+    
+    /* Generate simulated 96-bit device DNA */
+    uint32_t dna_low = 0x12345678;
+    uint32_t dna_mid = 0x9ABCDEF0;
+    uint32_t dna_high = 0x13579BDF;
+    
+    xil_printf("=== Device DNA (PS) ===\r\n");
+    xil_printf("Device DNA (96-bit):\r\n");
+    xil_printf("  High: 0x%08X\r\n", dna_high);
+    xil_printf("  Mid:  0x%08X\r\n", dna_mid);
+    xil_printf("  Low:  0x%08X\r\n", dna_low);
+    xil_printf("\r\n");
+    xil_printf("Full DNA: 0x%08X%08X%08X\r\n", dna_high, dna_mid, dna_low);
+    xil_printf("\r\n");
+    
+    /* Send response with DNA */
+    char dna_response[MAX_RESPONSE_LEN];
+    snprintf(dna_response, sizeof(dna_response),
+             "DEVICE_DNA: 0x%08X%08X%08X", dna_high, dna_mid, dna_low);
+    send_response(dna_response);
 }
 
 /*
@@ -362,9 +429,11 @@ static void show_main_menu(void) {
     xil_printf("3. Run Application\r\n");
     xil_printf("4. Get Status\r\n");
     xil_printf("5. Capture RAM\r\n");
-    xil_printf("6. Help\r\n");
-    xil_printf("7. Exit\r\n");
-    xil_printf("Enter choice (1-7): ");
+    xil_printf("6. Output Data\r\n");
+    xil_printf("7. Get Device DNA\r\n");
+    xil_printf("8. Help\r\n");
+    xil_printf("9. Exit\r\n");
+    xil_printf("Enter choice (1-9): ");
 }
 
 /* Show Parameter Menu */
@@ -503,17 +572,27 @@ static void handle_menu_selection(char choice) {
             break;
             
         case '6':
+            xil_printf("\r\nOutputting data...\r\n");
+            handle_output_data_command();
+            break;
+            
+        case '7':
+            xil_printf("\r\nGetting device DNA...\r\n");
+            handle_device_dna_command();
+            break;
+            
+        case '8':
             xil_printf("\r\nShowing help...\r\n");
             handle_help_command();
             break;
             
-        case '7':
+        case '9':
             xil_printf("\r\nExiting...\r\n");
             handle_exit_command();
             break;
             
         default:
-            xil_printf("Invalid choice. Please enter 1-7.\r\n");
+            xil_printf("Invalid choice. Please enter 1-9.\r\n");
             break;
     }
 }
