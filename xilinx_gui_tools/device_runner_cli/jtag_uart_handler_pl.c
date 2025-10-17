@@ -15,15 +15,6 @@
 #include <string.h>
 #include <stdint.h>
 #include "xil_printf.h"
-#include "xuartlite.h"
-#include "xscugic.h"
-#include "xil_exception.h"
-#include "xparameters.h"
-
-/* JTAG UART Configuration for PL */
-#define UART_DEVICE_ID XPAR_AXI_UARTLITE_0_DEVICE_ID
-#define INTC_DEVICE_ID XPAR_PS7_SCUGIC_SINGLE_DEVICE_ID
-#define UART_INT_IRQ_ID XPAR_FABRIC_AXI_UARTLITE_0_INTERRUPT_INTR
 
 /* Buffer and Command Definitions */
 #define BUFFER_SIZE 1024
@@ -60,20 +51,13 @@
 #define STATUS_EXITING "EXITING"
 
 /* Global Variables */
-static XUartLite UartLite;
-static XScuGic InterruptController;
 static volatile int running = 1;
 static uint32_t param1 = 0x00000001;  /* Default: Short */
 static uint32_t param2 = 0x43C00000;  /* Default: Base address */
 static uint32_t param3 = 0x00001000;  /* Default: Size */
 static char app_status[64] = "IDLE";
-static char rx_buffer[BUFFER_SIZE];
-static int rx_count = 0;
 
 /* Function Prototypes */
-static int init_uart(void);
-static int init_interrupts(void);
-static void uart_interrupt_handler(void *CallBackRef, unsigned int EventData);
 static int send_response(const char *response);
 static int receive_command(char *command, int max_len);
 static void handle_command(const char *command);
@@ -86,49 +70,30 @@ static void handle_exit_command(void);
 static void handle_help_command(void);
 static void print_banner(void);
 static void delay_us(uint32_t delay);
+static void show_main_menu(void);
+static void show_param_menu(void);
+static void show_data_ready_menu(void);
+static char get_char_input(void);
+static void handle_menu_selection(char choice);
 
 /* Main Application Entry Point */
 int main(void) {
-    char command[MAX_COMMAND_LEN];
-    int ret;
-    
-    /* Initialize UART */
-    if (init_uart() != XST_SUCCESS) {
-        xil_printf("ERROR: Failed to initialize UART\r\n");
-        return -1;
-    }
-    
-    /* Initialize interrupts */
-    if (init_interrupts() != XST_SUCCESS) {
-        xil_printf("ERROR: Failed to initialize interrupts\r\n");
-        return -1;
-    }
+    char choice;
     
     /* Print startup banner */
     print_banner();
     
     xil_printf("JTAG UART Handler (PL) started successfully\r\n");
-    xil_printf("UART Device ID: %d\r\n", UART_DEVICE_ID);
     xil_printf("Waiting for commands...\r\n\r\n");
     
     /* Send ready signal */
     send_response(RESPONSE_READY);
     
-    /* Main command loop */
+    /* Main menu loop */
     while (running) {
-        /* Check for received data */
-        if (rx_count > 0) {
-            /* Process received command */
-            memcpy(command, rx_buffer, rx_count);
-            command[rx_count] = '\0';
-            
-            xil_printf("Received command: %s\r\n", command);
-            handle_command(command);
-            
-            /* Clear buffer */
-            rx_count = 0;
-            memset(rx_buffer, 0, sizeof(rx_buffer));
-        }
+        show_main_menu();
+        choice = get_char_input();
+        handle_menu_selection(choice);
         
         /* Small delay to prevent busy waiting */
         delay_us(1000); /* 1ms delay */
@@ -138,102 +103,36 @@ int main(void) {
     return 0;
 }
 
-/* Initialize UART */
-static int init_uart(void) {
-    XUartLite_Config *Config;
-    int Status;
-    
-    /* Initialize the UART driver */
-    Config = XUartLite_LookupConfig(UART_DEVICE_ID);
-    if (NULL == Config) {
-        return XST_FAILURE;
-    }
-    
-    Status = XUartLite_CfgInitialize(&UartLite, Config, Config->RegBaseAddr);
-    if (Status != XST_SUCCESS) {
-        return XST_FAILURE;
-    }
-    
-    /* Set up interrupt handler */
-    XUartLite_SetRecvHandler(&UartLite, uart_interrupt_handler, &UartLite);
-    
-    /* Enable interrupts */
-    XUartLite_EnableInterrupt(&UartLite);
-    
-    return XST_SUCCESS;
-}
-
-/* Initialize Interrupts */
-static int init_interrupts(void) {
-    int Status;
-    
-    /* Initialize the interrupt controller */
-    Status = XScuGic_ConfigIntr(&InterruptController, UART_INT_IRQ_ID,
-                                XIL_EXCEPTION_TYPE_INT, XPAR_PS7_SCUGIC_SINGLE_CPU_BASE);
-    if (Status != XST_SUCCESS) {
-        return XST_FAILURE;
-    }
-    
-    /* Connect the interrupt handler */
-    Status = XScuGic_Connect(&InterruptController, UART_INT_IRQ_ID,
-                             (Xil_ExceptionHandler)XUartLite_InterruptHandler,
-                             &UartLite);
-    if (Status != XST_SUCCESS) {
-        return XST_FAILURE;
-    }
-    
-    /* Enable the interrupt */
-    XScuGic_Enable(&InterruptController, UART_INT_IRQ_ID);
-    
-    /* Initialize the exception table */
-    Xil_ExceptionInit();
-    Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_INT,
-                                  (Xil_ExceptionHandler)XScuGic_InterruptHandler,
-                                  &InterruptController);
-    
-    /* Enable exceptions */
-    Xil_ExceptionEnable();
-    
-    return XST_SUCCESS;
-}
-
-/* UART Interrupt Handler */
-static void uart_interrupt_handler(void *CallBackRef, unsigned int EventData) {
-    XUartLite *UartInstancePtr = (XUartLite *)CallBackRef;
-    uint32_t ReceivedCount;
-    uint8_t Buffer[BUFFER_SIZE];
-    
-    /* Receive data from UART */
-    ReceivedCount = XUartLite_Recv(UartInstancePtr, Buffer, sizeof(Buffer));
-    
-    if (ReceivedCount > 0) {
-        /* Copy received data to buffer */
-        if (rx_count + ReceivedCount < BUFFER_SIZE) {
-            memcpy(rx_buffer + rx_count, Buffer, ReceivedCount);
-            rx_count += ReceivedCount;
-        }
-    }
-}
-
 /* Send Response via UART */
 static int send_response(const char *response) {
-    int len;
-    int bytes_sent;
-    
-    len = strlen(response);
-    bytes_sent = XUartLite_Send(&UartLite, (u8*)response, len);
-    
-    if (bytes_sent != len) {
-        xil_printf("Failed to send response\r\n");
-        return -1;
-    }
-    
-    /* Send newline */
-    XUartLite_Send(&UartLite, (u8*)"\r\n", 2);
-    
-    xil_printf("Sent response: %s\r\n", response);
+    xil_printf("%s\r\n", response);
     return 0;
 }
+
+/* Receive Command from UART */
+static int receive_command(char *command, int max_len) {
+    int c;
+    int len = 0;
+    
+    /* Check if character is available */
+    c = getchar();
+    if (c == EOF) {
+        return 0;
+    }
+    
+    /* Read characters until newline or buffer full */
+    while (c != '\n' && c != '\r' && len < max_len - 1) {
+        command[len++] = (char)c;
+        c = getchar();
+        if (c == EOF) {
+            break;
+        }
+    }
+    
+    command[len] = '\0';
+    return len;
+}
+
 
 /* Handle Incoming Commands */
 static void handle_command(const char *command) {
@@ -428,4 +327,168 @@ static void print_banner(void) {
     xil_printf("    JTAG UART Handler v1.0.0 (PL Version)\r\n");
     xil_printf("    FPGA PL Baremetal Communication Interface\r\n");
     xil_printf("\r\n");
+}
+
+/* Show Main Menu */
+static void show_main_menu(void) {
+    xil_printf("\r\n=== JTAG UART Handler Menu (PL) ===\r\n");
+    xil_printf("1. Initialize\r\n");
+    xil_printf("2. Set Parameters\r\n");
+    xil_printf("3. Run Application\r\n");
+    xil_printf("4. Get Status\r\n");
+    xil_printf("5. Capture RAM\r\n");
+    xil_printf("6. Help\r\n");
+    xil_printf("7. Exit\r\n");
+    xil_printf("Enter choice (1-7): ");
+}
+
+/* Show Parameter Menu */
+static void show_param_menu(void) {
+    xil_printf("\r\n=== Parameter Configuration (PL) ===\r\n");
+    xil_printf("Current Parameters:\r\n");
+    xil_printf("  Param1: 0x%08X\r\n", param1);
+    xil_printf("  Param2: 0x%08X\r\n", param2);
+    xil_printf("  Param3: 0x%08X\r\n", param3);
+    xil_printf("\r\n");
+    xil_printf("1. Set Param1 (Height: Short/Medium/Tall)\r\n");
+    xil_printf("2. Set Param2 (Base Address)\r\n");
+    xil_printf("3. Set Param3 (Size)\r\n");
+    xil_printf("4. Back to Main Menu\r\n");
+    xil_printf("Enter choice (1-4): ");
+}
+
+/* Show Data Ready Menu */
+static void show_data_ready_menu(void) {
+    xil_printf("\r\n=== Data Ready Handling (PL) ===\r\n");
+    xil_printf("1. Manual Mode (Press Enter when ready)\r\n");
+    xil_printf("2. Fixed Delay (5 seconds)\r\n");
+    xil_printf("3. Polling Mode (Check status)\r\n");
+    xil_printf("Enter choice (1-3): ");
+}
+
+/* Get Single Character Input */
+static char get_char_input(void) {
+    int c;
+    c = getchar();
+    if (c == EOF) {
+        return 0;
+    }
+    /* Clear any remaining characters in buffer */
+    while (getchar() != '\n' && getchar() != EOF);
+    return (char)c;
+}
+
+/* Handle Menu Selection */
+static void handle_menu_selection(char choice) {
+    char param_choice;
+    char data_choice;
+    uint32_t new_value;
+    
+    switch (choice) {
+        case '1':
+            xil_printf("\r\nInitializing PL...\r\n");
+            handle_init_command();
+            break;
+            
+        case '2':
+            show_param_menu();
+            param_choice = get_char_input();
+            switch (param_choice) {
+                case '1':
+                    xil_printf("\r\nHeight Selection:\r\n");
+                    xil_printf("1. Short (0x00000001)\r\n");
+                    xil_printf("2. Medium (0x00000002)\r\n");
+                    xil_printf("3. Tall (0x00000003)\r\n");
+                    xil_printf("Enter choice (1-3): ");
+                    param_choice = get_char_input();
+                    switch (param_choice) {
+                        case '1': param1 = 0x00000001; break;
+                        case '2': param1 = 0x00000002; break;
+                        case '3': param1 = 0x00000003; break;
+                        default: xil_printf("Invalid choice\r\n"); break;
+                    }
+                    xil_printf("Param1 set to 0x%08X\r\n", param1);
+                    break;
+                    
+                case '2':
+                    xil_printf("\r\nEnter Param2 value (hex): ");
+                    if (scanf("%X", &new_value) == 1) {
+                        param2 = new_value;
+                        xil_printf("Param2 set to 0x%08X\r\n", param2);
+                    } else {
+                        xil_printf("Invalid input\r\n");
+                    }
+                    break;
+                    
+                case '3':
+                    xil_printf("\r\nEnter Param3 value (hex): ");
+                    if (scanf("%X", &new_value) == 1) {
+                        param3 = new_value;
+                        xil_printf("Param3 set to 0x%08X\r\n", param3);
+                    } else {
+                        xil_printf("Invalid input\r\n");
+                    }
+                    break;
+                    
+                case '4':
+                    xil_printf("\r\nReturning to main menu...\r\n");
+                    break;
+                    
+                default:
+                    xil_printf("Invalid choice\r\n");
+                    break;
+            }
+            break;
+            
+        case '3':
+            xil_printf("\r\nRunning PL application...\r\n");
+            handle_run_app_command();
+            break;
+            
+        case '4':
+            xil_printf("\r\nGetting PL status...\r\n");
+            handle_get_status_command();
+            break;
+            
+        case '5':
+            show_data_ready_menu();
+            data_choice = get_char_input();
+            switch (data_choice) {
+                case '1':
+                    xil_printf("\r\nManual mode: Press Enter when data is ready...\r\n");
+                    getchar(); /* Wait for Enter */
+                    xil_printf("Data ready confirmed\r\n");
+                    break;
+                    
+                case '2':
+                    xil_printf("\r\nFixed delay: Waiting 5 seconds...\r\n");
+                    delay_us(5000000); /* 5 seconds */
+                    xil_printf("Delay completed\r\n");
+                    break;
+                    
+                case '3':
+                    xil_printf("\r\nPolling mode: Checking PL status...\r\n");
+                    break;
+                    
+                default:
+                    xil_printf("Invalid choice\r\n");
+                    break;
+            }
+            handle_capture_ram_command();
+            break;
+            
+        case '6':
+            xil_printf("\r\nShowing PL help...\r\n");
+            handle_help_command();
+            break;
+            
+        case '7':
+            xil_printf("\r\nExiting PL handler...\r\n");
+            handle_exit_command();
+            break;
+            
+        default:
+            xil_printf("Invalid choice. Please enter 1-7.\r\n");
+            break;
+    }
 }
