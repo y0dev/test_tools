@@ -549,11 +549,16 @@ proc conn_device {hw_server_host} {
     rst -system
     after 1000
     
-    # Step 4: Connect to target a53_0
-    puts "Step 4: Connecting to target a53_0..."
+    # Step 4: Initialize PSU
+    puts "Step 4: Initializing PSU..."
+    source psu_init.tcl
+    psu_init
+    
+    # Step 5: Connect to target a53_0
+    puts "Step 5: Connecting to target a53_0..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     
-    # Step 5: Verify target is ready
+    # Step 6: Verify target is ready
     rst -processor
 }
 
@@ -1026,6 +1031,31 @@ proc log_message {message} {
         puts $fp "$timestamp - $message"
         close $fp
     }
+}
+
+# Generate BOOT.bin with archiving functionality
+proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch "zynqmp"}} {
+    # Check if a previous BOOT.bin exists
+    if {[file exists $output_bin]} {
+        # Generate timestamp (YYYYMMDD_HHMMSS)
+        set timestamp [clock format [clock seconds] -format "%Y%m%d_%H%M%S"]
+        
+        # Create archive directory if not exists
+        set archive_dir "./boot_archive"
+        file mkdir $archive_dir
+
+        # Build archived filename
+        set archived_file "$archive_dir/BOOT_$timestamp.bin"
+        
+        # Move old BOOT.bin to archive
+        file rename -force $output_bin $archived_file
+        puts "Archived old BOOT.bin to $archived_file"
+    }
+
+    # Now generate the new one
+    puts "Generating new BOOT.bin..."
+    exec bootgen -image $bif_file -arch $arch -o i $output_bin -w on
+    puts "New BOOT.bin created at $output_bin"
 }
 
 # Main entry point
