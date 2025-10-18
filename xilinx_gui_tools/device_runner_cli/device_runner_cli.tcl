@@ -523,7 +523,7 @@ proc cleanup_device {} {
 }
 
 # Connect to device, reset cores and connect to target a53_0
-proc conn_device {hw_server_host} {
+proc conn_device {hw_server_host {bit_file_path ""}} {
     global log_file
     
     log_message "Connecting to device: $hw_server_host"
@@ -554,11 +554,25 @@ proc conn_device {hw_server_host} {
     source psu_init.tcl
     psu_init
     
-    # Step 5: Connect to target a53_0
-    puts "Step 5: Connecting to target a53_0..."
+    # Step 5: Program FPGA with bit file
+    puts "Step 5: Programming FPGA..."
+    if {$bit_file_path != ""} {
+        if {[file exists $bit_file_path]} {
+            puts "Programming FPGA with: $bit_file_path"
+            fpga -f $bit_file_path
+            puts "FPGA programming completed"
+        } else {
+            puts "Warning: Bit file not found: $bit_file_path"
+        }
+    } else {
+        puts "Warning: No bit file specified for FPGA programming"
+    }
+    
+    # Step 6: Connect to target a53_0
+    puts "Step 6: Connecting to target a53_0..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     
-    # Step 6: Verify target is ready
+    # Step 7: Verify target is ready
     rst -processor
 }
 
