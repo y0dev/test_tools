@@ -9,6 +9,11 @@ set ::output_dir "output"
 set ::log_file ""
 set ::console_widget ""
 
+# Script mode configuration
+set ::script_config_file ""
+set ::script_config_array ""
+set ::script_mode_enabled 0
+
 
 set tool_script   ""
 set tool_tcl_chan_id 0
@@ -41,6 +46,90 @@ set ::hw_server     "localhost"
 set ::ps_ref_clk    0
 set ::term_app      "device_runner_term.bat"
 set ::log_dir       "logs"
+set ::bit_file      ""
+
+# Parse INI configuration file
+proc parse_ini_file {ini_file} {
+    global script_config_array
+    
+    if {![file exists $ini_file]} {
+        puts "ERROR: INI file not found: $ini_file"
+        return 0
+    }
+    
+    puts "Parsing INI configuration file: $ini_file"
+    log_message "Parsing INI configuration file: $ini_file"
+    
+    set fp [open $ini_file r]
+    set current_section ""
+    
+    while {[gets $fp line] != -1} {
+        # Remove leading/trailing whitespace
+        set line [string trim $line]
+        
+        # Skip empty lines and comments
+        if {$line == "" || [string match "#*" $line] || [string match ";*" $line]} {
+            continue
+        }
+        
+        # Check for section header [section]
+        if {[string match "\[*\]" $line]} {
+            set current_section [string range $line 1 end-1]
+            puts "Found section: $current_section"
+            continue
+        }
+        
+        # Parse key=value pairs
+        if {[string first "=" $line] > 0} {
+            set key_value [split $line "="]
+            set key [string trim [lindex $key_value 0]]
+            set value [string trim [lindex $key_value 1]]
+            
+            # Remove quotes if present
+            if {[string match "\"*\"" $value]} {
+                set value [string range $value 1 end-1]
+            }
+            
+            # Store in array with section prefix
+            if {$current_section != ""} {
+                set full_key "${current_section}.${key}"
+            } else {
+                set full_key $key
+            }
+            
+            set script_config_array($full_key) $value
+            puts "  $full_key = $value"
+        }
+    }
+    
+    close $fp
+    puts "INI file parsing completed"
+    log_message "INI file parsing completed"
+    return 1
+}
+
+# Get INI configuration value
+proc get_ini_config {key {default_value ""}} {
+    global script_config_array
+    
+    if {[info exists script_config_array($key)]} {
+        return $script_config_array($key)
+    } else {
+        return $default_value
+    }
+}
+
+# Get all INI configuration keys for a section
+proc get_ini_section_keys {section} {
+    global script_config_array
+    set keys {}
+    
+    foreach key [array names script_config_array "${section}.*"] {
+        lappend keys [string range $key [expr [string length $section] + 1] end]
+    }
+    
+    return $keys
+}
 
 # Parse command line arguments and return as array
 proc parse_command_line_args {} {
@@ -56,6 +145,7 @@ proc parse_command_line_args {} {
     set args_array(log_dir)       "logs"
     set args_array(tool_script)   ""
     set args_array(clk_elf_file)  ""
+    set args_array(bit_file)      ""
 
     # default filename values
     set clk_elf_file                ""
@@ -155,6 +245,20 @@ proc parse_command_line_args {} {
                     log_message "Tool Script set to: $args_array(tool_script)"
                 }
             }
+            "-ini_config" {
+                incr i
+                if {$i < [llength $argv]} {
+                    set args_array(ini_config) [lindex $argv $i]
+                    log_message "INI configuration file set to: $args_array(ini_config)"
+                }
+            }
+            "-bit_file" {
+                incr i
+                if {$i < [llength $argv]} {
+                    set args_array(bit_file) [lindex $argv $i]
+                    log_message "Bit file set to: $args_array(bit_file)"
+                }
+            }
             "-help" {
                 show_help
                 exit 0
@@ -189,6 +293,7 @@ proc parse_command_line_args {} {
     set ::term_app $args_array(term_app)
     set ::log_dir $args_array(log_dir)
     set ::clk_elf_file $args_array(clk_elf_file)
+    set ::bit_file $args_array(bit_file)
 
     return [array get args_array]
 
@@ -670,12 +775,31 @@ proc show_help {} {
     puts "  -ps_ref_clk <freq>      PS reference clock frequency (default: 0)"
     puts "  -term_app <app>         Terminal application (default: device_runner_term.bat)"
     puts "  -log_dir <dir>          Log directory (default: logs)"
+    puts "  -ini_config <file>      INI configuration file for script mode"
+    puts "  -bit_file <file>        Bit file for FPGA programming"
     puts "  -xsdb_path <path>       Path to XSDB executable"
     puts "  -jtag_tcp <url>         JTAG TCP connection URL"
     puts "  -help                   Show this help message"
     puts ""
+    puts "Script Mode with INI Configuration:"
+    puts "  device_runner_cli.tcl -mode script -ini_config config.ini"
+    puts ""
+    puts "INI File Format:"
+    puts "  [connection]"
+    puts "  hw_server=localhost"
+    puts "  [registers]"
+    puts "  command_addr=0xXXXX0000"
+    puts "  response_addr=0xXXXX0004"
+    puts "  startup_mode_addr=0xXXXX0008"
+    puts "  [commands]"
+    puts "  cmd1=init"
+    puts "  cmd2=run_app"
+    puts "  cmd3=get_status"
+    puts ""
     puts "Examples:"
     puts "  device_runner_cli.tcl -arch zynq -mode user -hw_server localhost"
+    puts "  device_runner_cli.tcl -mode script -ini_config my_config.ini"
+    puts "  device_runner_cli.tcl -bit_file design.bit -mode user"
     puts "  device_runner_cli.tcl -xsdb_path C:/Xilinx/Vitis/2023.2/bin/xsdb.exe"
     puts "  device_runner_cli.tcl -jtag_tcp 192.168.1.100:3121"
 }
@@ -721,6 +845,7 @@ proc init_app {} {
         puts "Boot mode             : $boot_mode"
         puts "Hardware server       : $hw_server"
         puts "PS reference clock    : $ps_ref_clk MHz"
+        puts "Bit file              : $::bit_file"
         puts "Log directory         : $log_dir"
 
         if {$mode == "script"} {
@@ -733,12 +858,19 @@ proc init_app {} {
 
         # Check for mode
         if {$mode == "script"} {
-            if {$term_app == "" || $term_app == "device_runner_term.bat"} {
-                puts "ERROR: Script mode requires a valid script file name"
-                puts "Please set -term_app to your script file path"
+            # Check if INI config file is provided
+            set ini_config [get_cmd_arg "ini_config"]
+            if {$ini_config != ""} {
+                puts "Script mode: Using INI configuration file $ini_config"
+                set ::script_mode_enabled 1
+                set ::script_config_file $ini_config
+            } elseif {$term_app != "" && $term_app != "device_runner_term.bat"} {
+                puts "Script mode: Using script file $term_app"
+            } else {
+                puts "ERROR: Script mode requires either -ini_config or -term_app"
+                puts "Please set -ini_config to your INI file path or -term_app to your script file path"
                 exit 1
             }
-            puts "Script mode: Using script file $term_app"
         } elseif {$mode == "user"} {
             puts "User mode             : Interactive operation"
             puts "Terminal Application  : $term_app"
@@ -764,7 +896,7 @@ proc init_app {} {
     # }
 
     # Connect to device, reset cores and connect to target a53_0
-    conn_device $hw_server
+    conn_device $hw_server $::bit_file
 
     # Get the tcp port number to communicate with device via uart/jtag
     set tcp_port_num [jtagterminal -socket]
@@ -794,68 +926,75 @@ proc init_app {} {
     } elseif {$mode == "script"} {
         puts "Mode: Script - Automated operation"
         
-        if {[catch {set tcl_chan_id [socket localhost $tcp_port_num]} err]} {
-            after 10000
-            set tcl_chan_id [socket localhost $tcp_port_num]
-        }
-
-        puts "Configure Tcl Channel..."
-        fconfigure $tcl_chan_id -buffering none -blocking 0 t-translation auto
-
-        puts "Setting up stdout fileevent..."
-        fileevent $tcl_chan_id readable "tcp_socket_to_stdout $tcl_chan_id"
-
-        if {$boot_mode == "jtag"} {
-            puts "Downloading Device Application .elf file"
-            dow $app_elf
-        }
-        puts "Place A53_0 into execution state..."
-        con
-
-        puts "Placing Tool into script mode..."
-        device_command "!esp!" 0 0
-
-        puts "Waiting until tool is done with initialization...\n"
-        set tool_ready 0
-        after 5000 {if {$tool_ready == 0} {
-            puts "\n\n ERROR: Tool did not initialize"
-            exit 1
-        }}
-
-        vwait tool_ready
-        puts "\n\n Tool has finished initializing..."
-        if {$log_dir != ""} {
-            puts "\tCreating script-mode log file..."
-            # Create log directory if it doesn't exist
-            if {[file isdirectory $log_dir] == 0} {
-                file mkdir $log_dir
+        # Check if INI-based script mode is enabled
+        if {$::script_mode_enabled} {
+            puts "Running INI-based script mode..."
+            run_script_mode_from_ini $::script_config_file
+        } else {
+            # Original script mode with terminal application
+            if {[catch {set tcl_chan_id [socket localhost $tcp_port_num]} err]} {
+                after 10000
+                set tcl_chan_id [socket localhost $tcp_port_num]
             }
 
-            # Set log file name to indicate script mode Logging
-            set log_filename "tlf"
+            puts "Configure Tcl Channel..."
+            fconfigure $tcl_chan_id -buffering none -blocking 0 t-translation auto
 
-            # Attempt to get device dna for log filename
-            read_device_dna 1
+            puts "Setting up stdout fileevent..."
+            fileevent $tcl_chan_id readable "tcp_socket_to_stdout $tcl_chan_id"
 
-            after 5000 {if {$log_filename == "tlf"} {
-                puts "\n\n ERROR: Could not read device DNA for log file!"
+            if {$boot_mode == "jtag"} {
+                puts "Downloading Device Application .elf file"
+                dow $app_elf
+            }
+            puts "Place A53_0 into execution state..."
+            con
+
+            puts "Placing Tool into script mode..."
+            device_command "!esp!" 0 0
+
+            puts "Waiting until tool is done with initialization...\n"
+            set tool_ready 0
+            after 5000 {if {$tool_ready == 0} {
+                puts "\n\n ERROR: Tool did not initialize"
                 exit 1
             }}
 
-            vwait log_filename
-
-            # Create filename based on dna data and current time
-            if {($log_filename != "tlf") && ($log_filename != "") && \
-                ([string length $log_filename] == 24) && \
-                ([string is xdigit $log_filename] == 1)} {
-                    set log_filename "${log_dir}/${log_filename}_[string toupper \
-                        [clock format [clock seconds] \
-                        -format "%d_%b_%Y_%H_%M_%S"]].log"
-                    set tool_log_fptr [open $log_filename w]
-                } else {
-                    puts "\n\n ERROR: Could not create script log file!\n"
-                    exit 1
+            vwait tool_ready
+            puts "\n\n Tool has finished initializing..."
+            if {$log_dir != ""} {
+                puts "\tCreating script-mode log file..."
+                # Create log directory if it doesn't exist
+                if {[file isdirectory $log_dir] == 0} {
+                    file mkdir $log_dir
                 }
+
+                # Set log file name to indicate script mode Logging
+                set log_filename "tlf"
+
+                # Attempt to get device dna for log filename
+                read_device_dna 1
+
+                after 5000 {if {$log_filename == "tlf"} {
+                    puts "\n\n ERROR: Could not read device DNA for log file!"
+                    exit 1
+                }}
+
+                vwait log_filename
+
+                # Create filename based on dna data and current time
+                if {($log_filename != "tlf") && ($log_filename != "") && \
+                    ([string length $log_filename] == 24) && \
+                    ([string is xdigit $log_filename] == 1)} {
+                        set log_filename "${log_dir}/${log_filename}_[string toupper \
+                            [clock format [clock seconds] \
+                            -format "%d_%b_%Y_%H_%M_%S"]].log"
+                        set tool_log_fptr [open $log_filename w]
+                    } else {
+                        puts "\n\n ERROR: Could not create script log file!\n"
+                        exit 1
+                    }
+            }
         }
     } else {
         puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
@@ -1070,6 +1209,219 @@ proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch 
     puts "Generating new BOOT.bin..."
     exec bootgen -image $bif_file -arch $arch -o i $output_bin -w on
     puts "New BOOT.bin created at $output_bin"
+}
+
+# INI-based Script Mode Handler
+proc run_script_mode_from_ini {ini_file} {
+    global script_config_array script_mode_enabled
+    
+    puts "Starting INI-based script mode..."
+    log_message "Starting INI-based script mode with file: $ini_file"
+    
+    # Parse INI configuration file
+    if {![parse_ini_file $ini_file]} {
+        puts "ERROR: Failed to parse INI file: $ini_file"
+        return 0
+    }
+    
+    # Get configuration values
+    set hw_server [get_ini_config "connection.hw_server" "localhost"]
+    set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
+    set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
+    set startup_mode_addr [get_ini_config "registers.startup_mode_addr" "0xXXXX0008"]
+    set log_file [get_ini_config "logging.log_file" "script_log.txt"]
+    set timeout [get_ini_config "timing.timeout" "5000"]
+    set retries [get_ini_config "timing.retries" "3"]
+    set bit_file [get_ini_config "fpga.bit_file" ""]
+    
+    puts "Configuration loaded:"
+    puts "  Hardware Server: $hw_server"
+    puts "  Command Address: $command_addr"
+    puts "  Response Address: $response_addr"
+    puts "  Startup Mode Address: $startup_mode_addr"
+    puts "  Log File: $log_file"
+    puts "  Timeout: ${timeout}ms"
+    puts "  Retries: $retries"
+    puts "  Bit File: $bit_file"
+    
+    # Set script mode in startup register
+    puts "Setting script mode in startup register..."
+    mwr $startup_mode_addr 0x00000002  ;# JTAG Script Mode
+    
+    # Connect to hardware server
+    puts "Connecting to hardware server: $hw_server"
+    connect -url tcp:$hw_server:3121
+    
+    # Set target to A53 core
+    puts "Setting target to A53 core..."
+    targets -set -filter {name =~ "*A53*#0"}
+    
+    # Start JTAG terminal logging
+    puts "Starting JTAG terminal logging to: $log_file"
+    jtagterminal -start -file $log_file
+    
+    # Continue execution
+    puts "Continuing execution..."
+    con
+    
+    # Execute script commands from INI file
+    execute_script_commands_from_ini
+    
+    # Stop JTAG terminal logging
+    puts "Stopping JTAG terminal logging..."
+    jtagterminal -stop
+    
+    log_message "INI-based script mode completed"
+    puts "INI-based script mode completed"
+    return 1
+}
+
+# Execute script commands from INI configuration
+proc execute_script_commands_from_ini {} {
+    global script_config_array
+    
+    puts "Executing script commands from INI configuration..."
+    
+    # Get command sequence from INI
+    set command_keys [get_ini_section_keys "commands"]
+    
+    if {[llength $command_keys] == 0} {
+        puts "No commands found in INI file"
+        return
+    }
+    
+    foreach cmd_key $command_keys {
+        set full_key "commands.$cmd_key"
+        set command [get_ini_config $full_key]
+        
+        if {$command != ""} {
+            puts "Executing command: $command"
+            execute_script_command $command
+        }
+    }
+}
+
+# Execute individual script command
+proc execute_script_command {command} {
+    global script_config_array
+    
+    set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
+    set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
+    set timeout [get_ini_config "timing.timeout" "5000"]
+    
+    # Parse command and execute
+    set cmd_parts [split $command " "]
+    set cmd_type [lindex $cmd_parts 0]
+    
+    switch $cmd_type {
+        "init" {
+            puts "Executing INIT command..."
+            mwr $command_addr 2  ;# Command 2 = init
+            wait_for_response $response_addr $timeout
+        }
+        "run_app" {
+            puts "Executing RUN_APP command..."
+            mwr $command_addr 3  ;# Command 3 = run_app
+            wait_for_response $response_addr $timeout
+        }
+        "set_param" {
+            set param_name [lindex $cmd_parts 1]
+            set param_value [lindex $cmd_parts 2]
+            puts "Executing SET_PARAM command: $param_name = $param_value"
+            # For now, just execute as init (would need parameter handling)
+            mwr $command_addr 2
+            wait_for_response $response_addr $timeout
+        }
+        "get_status" {
+            puts "Executing GET_STATUS command..."
+            mwr $command_addr 4  ;# Command 4 = get_status
+            wait_for_response $response_addr $timeout
+        }
+        "capture_ram" {
+            puts "Executing CAPTURE_RAM command..."
+            mwr $command_addr 5  ;# Command 5 = capture_ram
+            wait_for_response $response_addr $timeout
+        }
+        "delay" {
+            set delay_ms [lindex $cmd_parts 1]
+            puts "Executing DELAY command: ${delay_ms}ms"
+            after $delay_ms
+        }
+        "exit" {
+            puts "Executing EXIT command..."
+            mwr $command_addr 0  ;# Clear command register
+            return
+        }
+        default {
+            puts "Unknown command: $cmd_type"
+        }
+    }
+}
+
+# Wait for response from device
+proc wait_for_response {response_addr timeout} {
+    puts "Waiting for response from address: $response_addr"
+    
+    for {set i 0} {$i < [expr $timeout / 100]} {incr i} {
+        set resp [mrd $response_addr]
+        if {$resp != 0} {
+            puts "Command response: $resp"
+            log_message "Command response received: $resp"
+            return $resp
+        }
+        after 100
+    }
+    
+    puts "Timeout waiting for response"
+    log_message "Timeout waiting for response from $response_addr"
+    return 0
+}
+
+# JTAG UART Communication Function
+proc jtag_uart_communication {hw_server_host {command_addr "0xXXXX0000"} {response_addr "0xXXXX0004"} {log_file "hostlog.txt"}} {
+    global log_file
+    
+    log_message "Starting JTAG UART communication with server: $hw_server_host"
+    puts "Starting JTAG UART communication..."
+    
+    # Connect to hardware server
+    puts "Connecting to hardware server: $hw_server_host"
+    connect -url tcp:$hw_server_host:3121
+    
+    # Set target to A53 core
+    puts "Setting target to A53 core..."
+    targets -set -filter {name =~ "*A53*#0"}
+    
+    # Start JTAG terminal logging
+    puts "Starting JTAG terminal logging to: $log_file"
+    jtagterminal -start -file $log_file
+    
+    # Continue execution
+    puts "Continuing execution..."
+    con
+    
+    # Issue command #1
+    puts "Issuing command to address: $command_addr"
+    mwr $command_addr 1
+    
+    # Wait/poll response register
+    puts "Polling response register at: $response_addr"
+    for {set i 0} {$i < 100} {incr i} {
+        set resp [mrd $response_addr]
+        if {$resp != 0} {
+            puts "Command response: $resp"
+            log_message "Command response received: $resp"
+            break
+        }
+        after 100
+    }
+    
+    # Stop JTAG terminal logging
+    puts "Stopping JTAG terminal logging..."
+    jtagterminal -stop
+    
+    log_message "JTAG UART communication completed"
+    puts "JTAG UART communication completed"
 }
 
 # Main entry point
