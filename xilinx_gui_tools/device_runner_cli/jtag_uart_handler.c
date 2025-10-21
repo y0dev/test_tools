@@ -14,7 +14,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <ctype.h>
 #include "xil_printf.h"
+#include "xil_io.h"
+
+// UART I/O functions from BSP
+char inbyte(void);
+void outbyte(char c);
 
 /* Buffer and Command Definitions */
 #define BUFFER_SIZE 1024
@@ -77,6 +83,7 @@ static void show_param_menu(void);
 static void show_data_ready_menu(void);
 static char get_char_input(void);
 static void handle_menu_selection(char choice);
+static uint32_t get_hex_input(void);
 
 /*
 * Main Application Entry Point
@@ -90,6 +97,10 @@ int main(void) {
     
     xil_printf("JTAG UART Handler started successfully\r\n");
     xil_printf("Waiting for commands...\r\n\r\n");
+	
+    uint32_t result = get_hex_input();
+
+    xil_printf("\r\nFinal returned value = 0x%08lX\r\n", (unsigned long)result);
     
     /* Send ready signal */
     send_response(RESPONSE_READY);
@@ -598,12 +609,57 @@ static void handle_menu_selection(char choice) {
 }
 
 /*
-   ###    ########   ######  ########  ######## ########  ######   ##     ## ####       ## ##    ## ##       ##     ## ##    ##  #######  ########   #######  ########   ######  ######## ##     ## ##     ## ##      ## ##     ## ##    ## ######## 
-  ## ##   ##     ## ##    ## ##     ## ##       ##       ##    ##  ##     ##  ##        ## ##   ##  ##       ###   ### ###   ## ##     ## ##     ## ##     ## ##     ## ##    ##    ##    ##     ## ##     ## ##  ##  ##  ##   ##   ##  ##       ##  
- ##   ##  ##     ## ##       ##     ## ##       ##       ##        ##     ##  ##        ## ##  ##   ##       #### #### ####  ## ##     ## ##     ## ##     ## ##     ## ##          ##    ##     ## ##     ## ##  ##  ##   ## ##     ####       ##   
-##     ## ########  ##       ##     ## ######   ######   ##   #### #########  ##        ## #####    ##       ## ### ## ## ## ## ##     ## ########  ##     ## ########   ######     ##    ##     ## ##     ## ##  ##  ##    ###       ##       ##    
-######### ##     ## ##       ##     ## ##       ##       ##    ##  ##     ##  ##  ##    ## ##  ##   ##       ##     ## ##  #### ##     ## ##        ##  ## ## ##   ##         ##    ##    ##     ##  ##   ##  ##  ##  ##   ## ##      ##      ##     
-##     ## ##     ## ##    ## ##     ## ##       ##       ##    ##  ##     ##  ##  ##    ## ##   ##  ##       ##     ## ##   ### ##     ## ##        ##    ##  ##    ##  ##    ##    ##    ##     ##   ## ##   ##  ##  ##  ##   ##     ##     ##      
-##     ## ########   ######  ########  ######## ##        ######   ##     ## ####  ######  ##    ## ######## ##     ## ##    ##  #######  ##         ##### ## ##     ##  ######     ##     #######     ###     ###  ###  ##     ##    ##    ######## 
-
+* Get Hex Input from UART
+* @return: uint32_t - The hex value entered by user
 */
+static uint32_t get_hex_input(void)
+{
+    char input[32];
+    int idx = 0;
+    uint32_t value = 0;
+    char c;
+
+    xil_printf("Enter hex value (with or without 0x prefix): ");
+
+    while (1)
+    {
+        c = inbyte();  // blocking UART read
+
+        // Handle Enter key
+        if (c == '\r' || c == '\n')
+        {
+            input[idx] = '\0';
+            xil_printf("\r\n");
+
+            // Convert to uint32_t
+            value = (uint32_t)strtoul(input, NULL, 16);
+
+            xil_printf("You entered: 0x%08lX (%lu)\r\n", 
+                       (unsigned long)value, (unsigned long)value);
+
+            return value;  // ? exit and return value
+        }
+
+        // Handle Backspace
+        if ((c == '\b' || c == 0x7F) && idx > 0)
+        {
+            idx--;
+            xil_printf("\b \b");
+            continue;
+        }
+
+        // Accept only hex digits and 0x prefix chars
+        if (isxdigit(c) || c == 'x' || c == 'X')
+        {
+            if (idx < (int)(sizeof(input) - 1))
+            {
+                input[idx++] = c;
+                outbyte(c); // echo
+            }
+        }
+        else
+        {
+            xil_printf("\a"); // beep for invalid
+        }
+    }
+}
