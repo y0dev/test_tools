@@ -513,12 +513,20 @@ proc device_response {command {timeout 5000} {retries 3}} {
     return $response
 }
 
-# Enhanced device command with error handling
-proc device_command_enhanced {command {timeout 5000} {retries 3}} {
+# Source the shared memory messages module
+if {[file exists "messages.tcl"]} {
+    source messages.tcl
+    puts "Loaded shared memory messages module"
+} else {
+    puts "Warning: messages.tcl not found - shared memory communication disabled"
+}
+
+# Enhanced device command with shared memory support
+proc device_command_shared_memory {command {timeout 5000} {retries 3}} {
     global log_file
     
     # Log the command
-    log_message "Enhanced Device Command: $command (timeout: ${timeout}ms, retries: $retries)"
+    log_message "Shared Memory Device Command: $command (timeout: ${timeout}ms, retries: $retries)"
     
     set attempt 1
     set success 0
@@ -527,17 +535,93 @@ proc device_command_enhanced {command {timeout 5000} {retries 3}} {
     while {$attempt <= $retries && !$success} {
         puts "Attempt $attempt of $retries: $command"
         
-        # Simulate command execution with potential failure
-        set failure_rate 0.1  ;# 10% failure rate for simulation
-        if {[expr rand()] < $failure_rate && $attempt < $retries} {
-            set last_error "Command failed (simulated error)"
+        # Parse command and execute via shared memory
+        set cmd_parts [split $command " "]
+        set cmd_type [lindex $cmd_parts 0]
+        
+        switch $cmd_type {
+            "init" {
+                set success [send_init_command]
+                if {$success} {
+                    set response "INIT_OK"
+                } else {
+                    set last_error "INIT command failed"
+                }
+            }
+            "run_app" {
+                set success [send_run_app_command]
+                if {$success} {
+                    set response "RUN_OK"
+                } else {
+                    set last_error "RUN_APP command failed"
+                }
+            }
+            "set_param" {
+                set param_name [lindex $cmd_parts 1]
+                set param_value [lindex $cmd_parts 2]
+                set success [send_set_param_command $param_name $param_value]
+                if {$success} {
+                    set response "PARAM_SET_OK"
+                } else {
+                    set last_error "SET_PARAM command failed"
+                }
+            }
+            "get_status" {
+                set response [send_get_status_command]
+                if {![string match "ERROR:*" $response]} {
+                    set success 1
+                } else {
+                    set last_error $response
+                }
+            }
+            "capture_ram" {
+                set success [send_capture_ram_command]
+                if {$success} {
+                    set response "RAM_CAPTURE_OK"
+                } else {
+                    set last_error "CAPTURE_RAM command failed"
+                }
+            }
+            "set_config" {
+                set config_name [lindex $cmd_parts 1]
+                set config_value [lindex $cmd_parts 2]
+                set config_type [lindex $cmd_parts 3]
+                if {$config_type == ""} { set config_type 1 } ;# Default to string type
+                set success [send_set_config_command $config_name $config_value $config_type]
+                if {$success} {
+                    set response "CONFIG_SET_OK"
+                } else {
+                    set last_error "SET_CONFIG command failed"
+                }
+            }
+            "get_config" {
+                set config_name [lindex $cmd_parts 1]
+                set response [send_get_config_command $config_name]
+                if {![string match "ERROR:*" $response]} {
+                    set success 1
+                } else {
+                    set last_error $response
+                }
+            }
+            "exit" {
+                set success [send_exit_command]
+                if {$success} {
+                    set response "EXIT_OK"
+                } else {
+                    set last_error "EXIT command failed"
+                }
+            }
+            default {
+                set last_error "Unknown command: $cmd_type"
+            }
+        }
+        
+        if {!$success} {
             puts "Command failed: $last_error"
             log_message "Command attempt $attempt failed: $last_error"
             incr attempt
             after 100  ;# Brief delay before retry
         } else {
-            set success 1
-            set response [device_command $command $timeout $retries]
             puts "Command successful: $response"
             log_message "Command attempt $attempt successful: $response"
         }
@@ -897,6 +981,15 @@ proc init_app {} {
 
     # Connect to device, reset cores and connect to target a53_0
     conn_device $hw_server $::bit_file
+
+    # Initialize shared memory communication if available
+    if {[info exists ::shared_mem_base]} {
+        puts "Initializing shared memory communication..."
+        init_shared_memory
+        puts "Shared memory communication ready"
+    } else {
+        puts "Shared memory communication not available - using legacy mode"
+    }
 
     # Get the tcp port number to communicate with device via uart/jtag
     set tcp_port_num [jtagterminal -socket]
@@ -1305,6 +1398,15 @@ proc execute_script_commands_from_ini {} {
 proc execute_script_command {command} {
     global script_config_array
     
+    # Use shared memory communication if available
+    if {[info exists ::shared_mem_base]} {
+        puts "Executing script command via shared memory: $command"
+        set response [device_command_shared_memory $command]
+        puts "Command response: $response"
+        return $response
+    }
+    
+    # Fallback to legacy register-based communication
     set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
     set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
     set timeout [get_ini_config "timing.timeout" "5000"]
@@ -1422,6 +1524,60 @@ proc jtag_uart_communication {hw_server_host {command_addr "0xXXXX0000"} {respon
     
     log_message "JTAG UART communication completed"
     puts "JTAG UART communication completed"
+}
+
+# Test shared memory communication
+proc test_shared_memory_communication {} {
+    puts "=== Testing Shared Memory Communication ==="
+    
+    # Check if shared memory is available
+    if {![info exists ::shared_mem_base]} {
+        puts "ERROR: Shared memory not available"
+        return 0
+    }
+    
+    puts "Shared memory base: 0x[format %08X $::shared_mem_base]"
+    puts "Shared memory size: 0x[format %08X $::shared_mem_size]"
+    
+    # Test basic commands
+    puts "\n--- Testing INIT Command ---"
+    set result [device_command_shared_memory "init"]
+    puts "INIT Result: $result"
+    
+    puts "\n--- Testing SET_CONFIG Commands ---"
+    set result [device_command_shared_memory "set_config device_name TestDevice 1"]
+    puts "SET_CONFIG device_name Result: $result"
+    
+    set result [device_command_shared_memory "set_config base_address 0x43C00000 2"]
+    puts "SET_CONFIG base_address Result: $result"
+    
+    set result [device_command_shared_memory "set_config operation_mode 2 3"]
+    puts "SET_CONFIG operation_mode Result: $result"
+    
+    puts "\n--- Testing GET_CONFIG Commands ---"
+    set result [device_command_shared_memory "get_config device_name"]
+    puts "GET_CONFIG device_name Result: $result"
+    
+    set result [device_command_shared_memory "get_config base_address"]
+    puts "GET_CONFIG base_address Result: $result"
+    
+    set result [device_command_shared_memory "get_config operation_mode"]
+    puts "GET_CONFIG operation_mode Result: $result"
+    
+    puts "\n--- Testing GET_STATUS Command ---"
+    set result [device_command_shared_memory "get_status"]
+    puts "GET_STATUS Result: $result"
+    
+    puts "\n--- Testing RUN_APP Command ---"
+    set result [device_command_shared_memory "run_app"]
+    puts "RUN_APP Result: $result"
+    
+    puts "\n--- Testing CAPTURE_RAM Command ---"
+    set result [device_command_shared_memory "capture_ram"]
+    puts "CAPTURE_RAM Result: $result"
+    
+    puts "\n=== Shared Memory Communication Test Completed ==="
+    return 1
 }
 
 # Main entry point
