@@ -140,7 +140,7 @@ static void print_startup_banner(void);
 static void run_interactive_mode(void);
 static void run_script_mode(void);
 static void delay_us(uint32_t delay);
-static void display_shared_time(void);  
+static char *get_shared_time(void);  
 
 /* Shared Memory Function Prototypes */
 static void init_shared_memory(void);
@@ -166,7 +166,7 @@ static int handle_shared_memory_exit(void);
 */
 int main(void) {
     xil_printf("\r\n=== JTAG UART Handler Starting ===\r\n");
-    display_shared_time();
+
     // Detect startup mode (JTAG vs Script)
     startup_mode = detect_startup_mode();
     
@@ -218,6 +218,7 @@ static void print_banner(void) {
     xil_printf("\r\n");
     xil_printf("    JTAG UART Handler v2.0.0 (PS Version)\r\n");
     xil_printf("    FPGA PS Baremetal Communication Interface\r\n");
+    xil_printf("    Current Time: %s\r\n", get_shared_time());
     xil_printf("\r\n");
 }
 
@@ -227,14 +228,19 @@ static void print_banner(void) {
 */
 static void show_main_menu(void) {
     print_banner();
-    xil_printf("=== MAIN MENU ===\r\n");
-    xil_printf("1. View Configuration\r\n");
-    xil_printf("2. Configure Settings\r\n");
-    xil_printf("3. Run Application\r\n");
-    xil_printf("4. Get Status\r\n");
-    xil_printf("5. Help\r\n");
-    xil_printf("0. Exit\r\n");
-    xil_printf("\r\nEnter choice (0-5): ");
+    xil_printf("+---------------------------------------+\r\n");
+    xil_printf("|         MAIN MENU                     |\r\n");
+    xil_printf("+---------------------------------------+\r\n");
+    xil_printf("|                                       |\r\n");
+    xil_printf("| 1. View Configuration                 |\r\n");
+    xil_printf("| 2. Configure Settings                  |\r\n");
+    xil_printf("| 3. Run Application                     |\r\n");
+    xil_printf("| 4. Get Status                          |\r\n");
+    xil_printf("| 5. Help                                |\r\n");
+    xil_printf("| 0. Exit                                |\r\n");
+    xil_printf("|                                       |\r\n");
+    xil_printf("+---------------------------------------+\r\n");
+    xil_printf("Enter choice (0-5): ");
 }
 
 /*
@@ -1363,9 +1369,9 @@ static int handle_shared_memory_exit(void) {
 
 /*
  * Display Shared Time
- * @return: void
+ * @return: char * - The shared time string
 */
-static void display_shared_time(void) {
+static char *get_shared_time(void) {
     volatile char *shared_ptr = (volatile char *)SHARED_MEM_BASE;
     char buffer[64];
     int i = 0;
@@ -1377,6 +1383,5 @@ static void display_shared_time(void) {
         i++;
     }
     buffer[i] = '\0';
-
-    xil_printf("Current Time (from host): %s\r\n", buffer);
+    return buffer;
 }
