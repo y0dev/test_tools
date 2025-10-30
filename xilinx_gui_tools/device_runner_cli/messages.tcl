@@ -177,6 +177,22 @@ proc send_message {msg_type data {timeout 5000} {retries 3}} {
     return $response
 }
 
+proc send_timestamp {} {
+    # Write formatted timestamp string
+    set base_addr 0x10000000
+    set timestamp [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
+
+    # Write string bytes into shared memory
+    set addr $base_addr
+    foreach ch [split $timestamp ""] {
+        set val [scan $ch "%c"]
+        mwr $addr $val
+        incr addr
+    }
+    mwr $addr 0x00  ;# null terminator
+    puts "Wrote timestamp: $timestamp"
+}
+
 # Wait for message response from C application
 proc wait_for_message_response {{timeout 5000} {retries 3}} {
     global shared_mem_base MSG_TYPE_RESPONSE MSG_TYPE_ERROR
