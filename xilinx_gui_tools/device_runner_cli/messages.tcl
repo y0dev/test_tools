@@ -23,6 +23,10 @@ set ::CMD_BIT_CAPTURE_RAM 4   ;# Bit 4: CAPTURE_RAM command
 set ::CMD_BIT_SET_CONFIG 5    ;# Bit 5: SET_CONFIG command
 set ::CMD_BIT_GET_CONFIG 6    ;# Bit 6: GET_CONFIG command
 set ::CMD_BIT_EXIT 7          ;# Bit 7: EXIT command
+set ::CMD_BIT_START_TEST 8    ;# Bit 8: START_TEST command
+set ::CMD_BIT_RUN_TEST 9      ;# Bit 9: RUN_TEST command
+set ::CMD_BIT_GET_TEST_STATUS 10 ;# Bit 10: GET_TEST_STATUS command
+set ::CMD_BIT_RESET_PROCESSOR 11 ;# Bit 11: RESET_PROCESSOR command
 
 # Response register values
 set ::RESP_SUCCESS 0x00000001  ;# Success response
@@ -139,6 +143,7 @@ proc send_message {msg_type data {timeout 5000} {retries 3}} {
     global shared_mem_base CMD_REG_OFFSET RESP_REG_OFFSET
     global CMD_BIT_INIT CMD_BIT_RUN_APP CMD_BIT_SET_PARAM CMD_BIT_GET_STATUS
     global CMD_BIT_CAPTURE_RAM CMD_BIT_SET_CONFIG CMD_BIT_GET_CONFIG CMD_BIT_EXIT
+    global CMD_BIT_START_TEST CMD_BIT_RUN_TEST CMD_BIT_GET_TEST_STATUS CMD_BIT_RESET_PROCESSOR
     
     puts "Sending message: type=$msg_type, data='$data'"
     log_message "Sending message: type=$msg_type, data='$data'"
@@ -154,6 +159,10 @@ proc send_message {msg_type data {timeout 5000} {retries 3}} {
         $CMD_BIT_SET_CONFIG { set bit_pos $CMD_BIT_SET_CONFIG }
         $CMD_BIT_GET_CONFIG { set bit_pos $CMD_BIT_GET_CONFIG }
         $CMD_BIT_EXIT { set bit_pos $CMD_BIT_EXIT }
+        $CMD_BIT_START_TEST { set bit_pos $CMD_BIT_START_TEST }
+        $CMD_BIT_RUN_TEST { set bit_pos $CMD_BIT_RUN_TEST }
+        $CMD_BIT_GET_TEST_STATUS { set bit_pos $CMD_BIT_GET_TEST_STATUS }
+        $CMD_BIT_RESET_PROCESSOR { set bit_pos $CMD_BIT_RESET_PROCESSOR }
         default {
             puts "ERROR: Unknown command type: $msg_type"
             return "ERROR: Unknown command type"
@@ -505,6 +514,99 @@ proc test_shared_memory {} {
     send_capture_ram_command
     
     puts "\nShared memory communication test completed"
+}
+
+#--------------------------------------------------------------------
+# This function sends a START_TEST command to the C application
+#
+#--------------------------------------------------------------------
+#
+# param number_of_tests: Number of tests to run
+# param timeout: Test timeout in milliseconds
+# param retries: Number of retry attempts
+#--------------------------------------------------------------------
+proc send_start_test_command {number_of_tests timeout retries} {
+    global CMD_BIT_START_TEST
+    
+    set test_config_data "$number_of_tests|$timeout|$retries"
+    puts "Sending START_TEST command: $test_config_data"
+    set response [send_message $CMD_BIT_START_TEST $test_config_data]
+    
+    if {[string match "ERROR:*" $response]} {
+        puts "START_TEST command failed: $response"
+        return 0
+    } else {
+        puts "START_TEST command successful: $response"
+        return 1
+    }
+}
+
+#--------------------------------------------------------------------
+# This function sends a RUN_TEST command to the C application
+#
+#--------------------------------------------------------------------
+#
+# param test_number: Test case number
+# param test_name: Test case name
+# param test_description: Test case description
+# param requires_reset: Whether test requires processor reset (0 or 1)
+#--------------------------------------------------------------------
+proc send_run_test_command {test_number test_name test_description requires_reset} {
+    global CMD_BIT_RUN_TEST
+    
+    set test_data "$test_number|$test_name|$test_description|$requires_reset"
+    puts "Sending RUN_TEST command: $test_data"
+    set response [send_message $CMD_BIT_RUN_TEST $test_data]
+    
+    if {[string match "ERROR:*" $response]} {
+        puts "RUN_TEST command failed: $response"
+        return 0
+    } else {
+        puts "RUN_TEST command successful: $response"
+        return 1
+    }
+}
+
+#--------------------------------------------------------------------
+# This function sends a GET_TEST_STATUS command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc send_get_test_status_command {} {
+    global CMD_BIT_GET_TEST_STATUS
+    
+    puts "Sending GET_TEST_STATUS command..."
+    set response [send_message $CMD_BIT_GET_TEST_STATUS ""]
+    
+    if {[string match "ERROR:*" $response]} {
+        puts "GET_TEST_STATUS command failed: $response"
+        return ""
+    } else {
+        puts "GET_TEST_STATUS command successful: $response"
+        return $response
+    }
+}
+
+#--------------------------------------------------------------------
+# This function sends a RESET_PROCESSOR command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc send_reset_processor_command {} {
+    global CMD_BIT_RESET_PROCESSOR
+    
+    puts "Sending RESET_PROCESSOR command..."
+    set response [send_message $CMD_BIT_RESET_PROCESSOR ""]
+    
+    if {[string match "ERROR:*" $response]} {
+        puts "RESET_PROCESSOR command failed: $response"
+        return 0
+    } else {
+        puts "RESET_PROCESSOR command successful: $response"
+        return 1
+    }
 }
 
 # Log message function (if not already defined)
