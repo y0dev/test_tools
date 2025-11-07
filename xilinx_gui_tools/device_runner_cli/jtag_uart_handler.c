@@ -55,6 +55,14 @@ void outbyte(char c);
 #define SHARED_MEM_BASE 0x10000000
 #define SHARED_MEM_SIZE 0x1000
 
+/* Boot Mode Register Definition */
+#define BOOT_MODE_REG_ADDR 0xFF5E0200  /* CRL_APB BOOT_MODE register (read-only) */
+
+/* Device DNA Register Definitions (PS DNA - 96-bit value in 3 registers) */
+#define DNA_0_REG_ADDR 0xFFCC100C  /* PS DNA register 0 (bits 31:0) */
+#define DNA_1_REG_ADDR 0xFFCC1010  /* PS DNA register 1 (bits 63:32) */
+#define DNA_2_REG_ADDR 0xFFCC1014  /* PS DNA register 2 (bits 95:64) */
+
 /* Register offsets in shared memory */
 #define CMD_REG_OFFSET 0x0      /* Command register (bit field) */
 #define RESP_REG_OFFSET 0x4     /* Response register */
@@ -75,6 +83,8 @@ void outbyte(char c);
 #define MSG_TYPE_RUN_TEST 12
 #define MSG_TYPE_GET_TEST_STATUS 13
 #define MSG_TYPE_RESET_PROCESSOR 14
+#define MSG_TYPE_GET_BOOT_MODE 15
+#define MSG_TYPE_GET_DEVICE_DNA 16
 
 /* Status codes */
 #define MSG_STATUS_SUCCESS 0
@@ -197,6 +207,8 @@ static int handle_shared_memory_start_test(const char *data);
 static int handle_shared_memory_run_test(const char *data);
 static int handle_shared_memory_get_test_status(char *response, int max_len);
 static int handle_shared_memory_reset_processor(void);
+static int handle_shared_memory_get_boot_mode(char *response, int max_len);
+static int handle_shared_memory_get_device_dna(char *response, int max_len);
 static void reset_processor(void);
 static void initialize_test_config(void);
 
@@ -1025,6 +1037,24 @@ static int process_shared_memory_message(void) {
     } else if (cmd_reg & (1 << 11)) {  // CMD_BIT_RESET_PROCESSOR
         msg_type = MSG_TYPE_RESET_PROCESSOR;
         result = handle_shared_memory_reset_processor();
+    } else if (cmd_reg & (1 << 12)) {  // CMD_BIT_GET_BOOT_MODE
+        msg_type = MSG_TYPE_GET_BOOT_MODE;
+        char response[MAX_RESPONSE_LEN];
+        result = handle_shared_memory_get_boot_mode(response, sizeof(response));
+        if (result) {
+            write_data_area(response);
+            uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
+            Xil_Out32(resp_addr, RESP_SUCCESS);
+        }
+    } else if (cmd_reg & (1 << 13)) {  // CMD_BIT_GET_DEVICE_DNA
+        msg_type = MSG_TYPE_GET_DEVICE_DNA;
+        char response[MAX_RESPONSE_LEN];
+        result = handle_shared_memory_get_device_dna(response, sizeof(response));
+        if (result) {
+            write_data_area(response);
+            uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
+            Xil_Out32(resp_addr, RESP_SUCCESS);
+        }
     } else {
         xil_printf("Unknown command bit in register: 0x%08X\r\n", cmd_reg);
         uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
@@ -1451,6 +1481,97 @@ static int handle_shared_memory_get_test_status(char *response, int max_len) {
     } else {
         snprintf(response, max_len, "Test mode not active");
     }
+    
+    return 1;
+}
+
+/*
+ * Handle Shared Memory GET_BOOT_MODE Command
+ * @param response: Buffer to store response
+ * @param max_len: Maximum response length
+ * @return: int - 1 if successful, 0 if error
+ */
+static int handle_shared_memory_get_boot_mode(char *response, int max_len) {
+    xil_printf("Handling shared memory GET_BOOT_MODE command\r\n");
+    
+    // Read boot mode register (read-only register at 0xFF5E0200)
+    uint32_t boot_mode_reg = Xil_In32(BOOT_MODE_REG_ADDR);
+    
+    // Extract boot mode bits (typically bits [3:0] for Zynq UltraScale+)
+    uint32_t boot_mode = boot_mode_reg & 0x0F;
+    
+    // Decode boot mode to human-readable string
+    const char *boot_mode_str;
+    switch (boot_mode) {
+        case 0x0:
+            boot_mode_str = "JTAG";
+            break;
+        case 0x1:
+            boot_mode_str = "QSPI24";
+            break;
+        case 0x2:
+            boot_mode_str = "QSPI32";
+            break;
+        case 0x3:
+            boot_mode_str = "SD0";
+            break;
+        case 0x4:
+            boot_mode_str = "SD1";
+            break;
+        case 0x5:
+            boot_mode_str = "eMMC";
+            break;
+        case 0x6:
+            boot_mode_str = "NAND";
+            break;
+        case 0x7:
+            boot_mode_str = "USB";
+            break;
+        default:
+            boot_mode_str = "UNKNOWN";
+            break;
+    }
+    
+    xil_printf("Boot Mode Register: 0x%08X\r\n", boot_mode_reg);
+    xil_printf("Boot Mode: 0x%02X (%s)\r\n", boot_mode, boot_mode_str);
+    
+    // Format response string
+    snprintf(response, max_len,
+            "Boot Mode Register: 0x%08X, Boot Mode: 0x%02X (%s)",
+            boot_mode_reg, boot_mode, boot_mode_str);
+    
+    return 1;
+}
+
+/*
+ * Handle Shared Memory GET_DEVICE_DNA Command
+ * @param response: Buffer to store response
+ * @param max_len: Maximum response length
+ * @return: int - 1 if successful, 0 if error
+ */
+static int handle_shared_memory_get_device_dna(char *response, int max_len) {
+    xil_printf("Handling shared memory GET_DEVICE_DNA command\r\n");
+    
+    // Read PS Device DNA registers (96-bit value in 3 registers)
+    uint32_t dna_0 = Xil_In32(DNA_0_REG_ADDR);  // Bits 31:0
+    uint32_t dna_1 = Xil_In32(DNA_1_REG_ADDR);  // Bits 63:32
+    uint32_t dna_2 = Xil_In32(DNA_2_REG_ADDR);  // Bits 95:64
+    
+    xil_printf("PS Device DNA Register 0 (0x%08X): 0x%08X\r\n", DNA_0_REG_ADDR, dna_0);
+    xil_printf("PS Device DNA Register 1 (0x%08X): 0x%08X\r\n", DNA_1_REG_ADDR, dna_1);
+    xil_printf("PS Device DNA Register 2 (0x%08X): 0x%08X\r\n", DNA_2_REG_ADDR, dna_2);
+    
+    // Format 96-bit DNA value as hex string
+    // DNA_2 contains bits 95:64, DNA_1 contains bits 63:32, DNA_0 contains bits 31:0
+    // Note: Only bits [31:0] of DNA_2 are used (96-bit value, not 128-bit)
+    uint32_t dna_2_lower = dna_2 & 0xFFFFFFFF;  // Only use lower 32 bits
+    
+    // Format response string with individual register values and combined 96-bit value
+    snprintf(response, max_len,
+            "PS Device DNA - DNA_0: 0x%08X, DNA_1: 0x%08X, DNA_2: 0x%08X, Combined: 0x%08X%08X%08X",
+            dna_0, dna_1, dna_2, dna_2_lower, dna_1, dna_0);
+    
+    xil_printf("PS Device DNA (96-bit): 0x%08X%08X%08X\r\n", dna_2_lower, dna_1, dna_0);
     
     return 1;
 }

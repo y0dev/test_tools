@@ -27,6 +27,8 @@ set ::CMD_BIT_START_TEST 8    ;# Bit 8: START_TEST command
 set ::CMD_BIT_RUN_TEST 9      ;# Bit 9: RUN_TEST command
 set ::CMD_BIT_GET_TEST_STATUS 10 ;# Bit 10: GET_TEST_STATUS command
 set ::CMD_BIT_RESET_PROCESSOR 11 ;# Bit 11: RESET_PROCESSOR command
+set ::CMD_BIT_GET_BOOT_MODE 12 ;# Bit 12: GET_BOOT_MODE command
+set ::CMD_BIT_GET_DEVICE_DNA 13 ;# Bit 13: GET_DEVICE_DNA command
 
 # Response register values
 set ::RESP_SUCCESS 0x00000001  ;# Success response
@@ -144,6 +146,7 @@ proc send_message {msg_type data {timeout 5000} {retries 3}} {
     global CMD_BIT_INIT CMD_BIT_RUN_APP CMD_BIT_SET_PARAM CMD_BIT_GET_STATUS
     global CMD_BIT_CAPTURE_RAM CMD_BIT_SET_CONFIG CMD_BIT_GET_CONFIG CMD_BIT_EXIT
     global CMD_BIT_START_TEST CMD_BIT_RUN_TEST CMD_BIT_GET_TEST_STATUS CMD_BIT_RESET_PROCESSOR
+    global CMD_BIT_GET_BOOT_MODE CMD_BIT_GET_DEVICE_DNA
     
     puts "Sending message: type=$msg_type, data='$data'"
     log_message "Sending message: type=$msg_type, data='$data'"
@@ -163,6 +166,8 @@ proc send_message {msg_type data {timeout 5000} {retries 3}} {
         $CMD_BIT_RUN_TEST { set bit_pos $CMD_BIT_RUN_TEST }
         $CMD_BIT_GET_TEST_STATUS { set bit_pos $CMD_BIT_GET_TEST_STATUS }
         $CMD_BIT_RESET_PROCESSOR { set bit_pos $CMD_BIT_RESET_PROCESSOR }
+        $CMD_BIT_GET_BOOT_MODE { set bit_pos $CMD_BIT_GET_BOOT_MODE }
+        $CMD_BIT_GET_DEVICE_DNA { set bit_pos $CMD_BIT_GET_DEVICE_DNA }
         default {
             puts "ERROR: Unknown command type: $msg_type"
             return "ERROR: Unknown command type"
@@ -606,6 +611,48 @@ proc send_reset_processor_command {} {
     } else {
         puts "RESET_PROCESSOR command successful: $response"
         return 1
+    }
+}
+
+#--------------------------------------------------------------------
+# This function sends a GET_BOOT_MODE command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc send_get_boot_mode_command {} {
+    global CMD_BIT_GET_BOOT_MODE
+    
+    puts "Sending GET_BOOT_MODE command..."
+    set response [send_message $CMD_BIT_GET_BOOT_MODE ""]
+    
+    if {[string match "ERROR:*" $response]} {
+        puts "GET_BOOT_MODE command failed: $response"
+        return ""
+    } else {
+        puts "GET_BOOT_MODE command successful: $response"
+        return $response
+    }
+}
+
+#--------------------------------------------------------------------
+# This function sends a GET_DEVICE_DNA command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc send_get_device_dna_command {} {
+    global CMD_BIT_GET_DEVICE_DNA
+    
+    puts "Sending GET_DEVICE_DNA command..."
+    set response [send_message $CMD_BIT_GET_DEVICE_DNA ""]
+    
+    if {[string match "ERROR:*" $response]} {
+        puts "GET_DEVICE_DNA command failed: $response"
+        return ""
+    } else {
+        puts "GET_DEVICE_DNA command successful: $response"
+        return $response
     }
 }
 
