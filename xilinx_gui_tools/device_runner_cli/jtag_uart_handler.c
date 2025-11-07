@@ -125,7 +125,6 @@ static void display_configuration(void);
 static char get_char_input(void);
 static void get_string_input(char *buffer, int max_len, const char *prompt);
 static uint32_t get_hex_input(const char *prompt);
-static uint64_t get_hex_input_with_max_length(const char *prompt, int max_bytes);
 static uint32_t get_list_selection(const char *prompt, const char *options[], int num_options);
 static void handle_main_menu_selection(char choice);
 static void handle_config_menu_selection(char choice);
@@ -140,7 +139,6 @@ static void print_startup_banner(void);
 static void run_interactive_mode(void);
 static void run_script_mode(void);
 static void delay_us(uint32_t delay);
-static char *get_shared_time(void);  
 
 /* Shared Memory Function Prototypes */
 static void init_shared_memory(void);
@@ -166,7 +164,7 @@ static int handle_shared_memory_exit(void);
 */
 int main(void) {
     xil_printf("\r\n=== JTAG UART Handler Starting ===\r\n");
-
+    
     // Detect startup mode (JTAG vs Script)
     startup_mode = detect_startup_mode();
     
@@ -218,7 +216,6 @@ static void print_banner(void) {
     xil_printf("\r\n");
     xil_printf("    JTAG UART Handler v2.0.0 (PS Version)\r\n");
     xil_printf("    FPGA PS Baremetal Communication Interface\r\n");
-    xil_printf("    Current Time: %s\r\n", get_shared_time());
     xil_printf("\r\n");
 }
 
@@ -228,19 +225,14 @@ static void print_banner(void) {
 */
 static void show_main_menu(void) {
     print_banner();
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|         MAIN MENU                     |\r\n");
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|                                       |\r\n");
-    xil_printf("| 1. View Configuration                 |\r\n");
-    xil_printf("| 2. Configure Settings                  |\r\n");
-    xil_printf("| 3. Run Application                     |\r\n");
-    xil_printf("| 4. Get Status                          |\r\n");
-    xil_printf("| 5. Help                                |\r\n");
-    xil_printf("| 0. Exit                                |\r\n");
-    xil_printf("|                                       |\r\n");
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("Enter choice (0-5): ");
+    xil_printf("=== MAIN MENU ===\r\n");
+    xil_printf("1. View Configuration\r\n");
+    xil_printf("2. Configure Settings\r\n");
+    xil_printf("3. Run Application\r\n");
+    xil_printf("4. Get Status\r\n");
+    xil_printf("5. Help\r\n");
+    xil_printf("0. Exit\r\n");
+    xil_printf("\r\nEnter choice (0-5): ");
 }
 
 /*
@@ -249,20 +241,15 @@ static void show_main_menu(void) {
  */
 static void show_config_menu(void) {
     print_banner();
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|         CONFIGURATION MENU            |\r\n");
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|                                       |\r\n");
-    xil_printf("| 1. Device Name (String)              |\r\n");
-    xil_printf("| 2. Base Address (Hex)               |\r\n");
-    xil_printf("| 3. Operation Mode (List)            |\r\n");
-    xil_printf("| 4. Timeout Value (Hex)              |\r\n");
-    xil_printf("| 5. Debug Level (List)               |\r\n");
-    xil_printf("| 6. View Current Configuration        |\r\n");
-    xil_printf("| 0. Back to Main Menu                 |\r\n");
-    xil_printf("|                                       |\r\n");
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("Enter choice (0-6): ");
+    xil_printf("=== CONFIGURATION MENU ===\r\n");
+    xil_printf("1. Device Name (String)\r\n");
+    xil_printf("2. Base Address (Hex)\r\n");
+    xil_printf("3. Operation Mode (List)\r\n");
+    xil_printf("4. Timeout Value (Hex)\r\n");
+    xil_printf("5. Debug Level (List)\r\n");
+    xil_printf("6. View Current Configuration\r\n");
+    xil_printf("0. Back to Main Menu\r\n");
+    xil_printf("\r\nEnter choice (0-6): ");
 }
 
 /*
@@ -271,72 +258,25 @@ static void show_config_menu(void) {
  */
 static void display_configuration(void) {
     print_banner();
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|         CURRENT CONFIGURATION         |\r\n");
-    xil_printf("+----------------+----------------------+\r\n");
-    xil_printf("|                |                       |\r\n");
-    xil_printf("| Device Name    | %-20s                |\r\n", config.device_name);
-    xil_printf("| Base Address    | 0x%08X               |\r\n", config.base_address);
-    xil_printf("| Operation Mode | %-20d (%s)              |\r\n", config.operation_mode, 
+    xil_printf("=== CURRENT CONFIGURATION ===\r\n");
+    xil_printf("\r\n");
+    xil_printf("Device Name:     %s\r\n", config.device_name);
+    xil_printf("Base Address:    0x%08X\r\n", config.base_address);
+    
+    const char *mode_names[] = {"", "Short", "Medium", "Long"};
+    xil_printf("Operation Mode:  %d (%s)\r\n", config.operation_mode, 
                mode_names[config.operation_mode]);
-    xil_printf("| Timeout Value  | 0x%08X (%u ms)        |\r\n", config.timeout_value, config.timeout_value);
-    xil_printf("| Debug Level    | %-20d (%s)              |\r\n", config.debug_level, 
+    
+    xil_printf("Timeout Value:   0x%08X (%u ms)\r\n", config.timeout_value, config.timeout_value);
+    
+    const char *debug_names[] = {"", "Low", "Medium", "High", "Verbose"};
+    xil_printf("Debug Level:     %d (%s)\r\n", config.debug_level, 
                debug_names[config.debug_level]);
-    xil_printf("|                |                       |\r\n");
-    xil_printf("+---------------------------------------+\r\n");
+    
+    xil_printf("\r\n");
     xil_printf("Press any key to continue...");
     get_char_input();
 }
-
-/*
- * Display Result Data
- * @param results: Pointer to result array
- * @param count:   Number of results in array
- * @return: void
- */
-static void display_result_data(const char *title, const uint32_t *results, const size_t count) {
-    print_banner();
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|             %-20s               |\r\n", title);
-    xil_printf("+----------------+----------------------+\r\n");
-    xil_printf("|  Index        |       Value (Hex/Dec)     |\r\n");
-    xil_printf("+----------------+----------------------+\r\n");
-
-    for (size_t i = 0; i < count; i++) {
-        xil_printf("|  %-8d |  0x%08X  (%10u)  |\r\n", i, results[i], results[i]);
-    }
-
-    xil_printf("+-----------+---------------------------+\r\n");
-    xil_printf("Total Entries: %d\r\n", count);
-    xil_printf("Press any key to continue...");
-    get_char_input();
-}
-
-/*
- * Display Result Data
- * @param title: Title of the data
- * @param value_type: Type of the value
- * @param index_type: Type of the index
- * @param results: Pointer to result array
- * @param count:   Number of results in array
- * @return: void
- */
-static void display_result_data_with_index(const char *title, const uint32_t *results, const char *value_type, const char *index_type, size_t count) {
-    print_banner();
-    xil_printf("+---------------------------------------+\r\n");
-    xil_printf("|             %-20s               |\r\n", title);
-    xil_printf("+----------------+----------------------+\r\n");
-    xil_printf("|  %-8s        |       Value (%s)     |\r\n", index_type, value_type);
-    xil_printf("+----------------+----------------------+\r\n");
-
-    for (size_t i = 0; i < count; i++) {
-        xil_printf("|  %-8d |  0x%08X  (%10u)  |\r\n", index_type, results[i], results[i], value_type);
-    }
-    xil_printf("+----------------+----------------------+\r\n");
-    xil_printf("Total %s: %d\r\n", index_type, count);
-    xil_printf("+---------------------------------------+\r\n");
-}   
-
 
 /*
  * Get Single Character Input (No Enter Required)
@@ -437,70 +377,6 @@ static uint32_t get_hex_input(const char *prompt) {
     
     return value;
 }
-
-/*
- * Get Hex Input with Echo and Max Length
- * @param prompt: Prompt to display
- * @param max_bytes: Maximum number of bytes allowed (must be 4 or 8)
- * @return: uint64_t - The hex value entered (0 if invalid length)
- */
-static uint64_t get_hex_input_with_max_length(const char *prompt, int max_bytes) {
-    char input[32];
-    int idx = 0;
-    uint64_t value = 0;
-    char c;
-
-    // Validate max_bytes
-    if (max_bytes != 4 && max_bytes != 8) {
-        xil_printf("Error: max_bytes must be 4 or 8\r\n");
-        return 0;
-    }
-
-    int max_hex_digits = max_bytes * 2; // 1 byte = 2 hex digits
-
-    xil_printf("%s (max %d bytes / %d hex digits): ", 
-               prompt, max_bytes, max_hex_digits);
-
-    while (1) {
-        c = inbyte();
-
-        // Handle Enter key
-        if (c == '\r' || c == '\n') {
-            input[idx] = '\0';
-            xil_printf("\r\n");
-
-            // Convert to value
-            value = strtoull(input, NULL, 16);
-            break;
-        }
-
-        // Handle Backspace
-        if ((c == '\b' || c == 0x7F) && idx > 0) {
-            idx--;
-            xil_printf("\b \b");
-            continue;
-        }
-
-        // Accept only hex chars and 0x prefix
-        if (isxdigit(c) || ((c == 'x' || c == 'X') && idx > 0 && input[idx - 1] == '0')) {
-            // Count hex digits excluding 0x
-            int is_prefix = (idx >= 1 && input[0] == '0' && (input[1] == 'x' || input[1] == 'X'));
-            int hex_count = is_prefix ? idx - 2 : idx;
-
-            if (hex_count < max_hex_digits && idx < (int)(sizeof(input) - 1)) {
-                input[idx++] = c;
-                outbyte(c); // Echo character
-            } else {
-                xil_printf("\a"); // Beep if too long
-            }
-        } else {
-            xil_printf("\a"); // Invalid character
-        }
-    }
-
-    return value;
-}
-
 
 /*
  * Get List Selection (No Enter Required)
@@ -681,7 +557,7 @@ static void update_base_address(void) {
     xil_printf("Current: 0x%08X\r\n", config.base_address);
     xil_printf("\r\n");
     
-    config.base_address = get_hex_input_with_max_length("Enter new base address (hex)", 4);
+    config.base_address = get_hex_input("Enter new base address (hex)");
     
     xil_printf("\r\nBase address updated to: 0x%08X\r\n", config.base_address);
     xil_printf("Press any key to continue...");
@@ -1365,23 +1241,4 @@ static int handle_shared_memory_exit(void) {
     xil_printf("Handling shared memory EXIT command\r\n");
     running = 0;
     return 1;
-}
-
-/*
- * Display Shared Time
- * @return: char * - The shared time string
-*/
-static char *get_shared_time(void) {
-    volatile char *shared_ptr = (volatile char *)SHARED_MEM_BASE;
-    char buffer[64];
-    int i = 0;
-
-    // Copy until null terminator
-    while (i < sizeof(buffer) - 1) {
-        buffer[i] = shared_ptr[i];
-        if (buffer[i] == '\0') break;
-        i++;
-    }
-    buffer[i] = '\0';
-    return buffer;
 }

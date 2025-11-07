@@ -1,6 +1,6 @@
 #!/usr/bin/env tclsh
-# Shared Memory Messages for Device Runner CLI
-# Communication protocol between TCL script and C application
+# Shared Memory Communication for Device Runner CLI
+# Simple register-based communication protocol
 # Shared memory region: 0x10000000 - 0x10000FFF (4KB)
 
 # Global variables for shared memory communication
@@ -9,45 +9,38 @@ set ::shared_mem_size 0x1000
 set ::message_timeout 5000
 set ::message_retries 3
 
-# Message structure offsets in shared memory
-set ::MSG_HEADER_SIZE 16
-set ::MSG_DATA_SIZE [expr $::shared_mem_size - $::MSG_HEADER_SIZE]
+# Register offsets in shared memory
+set ::CMD_REG_OFFSET 0x0      ;# Command register (bit field)
+set ::RESP_REG_OFFSET 0x4     ;# Response register
+set ::DATA_AREA_OFFSET 0x8    ;# Data area for command parameters
 
-# Message header offsets
-set ::MSG_OFFSET_MAGIC 0      ;# Magic number (4 bytes)
-set ::MSG_OFFSET_TYPE 4       ;# Message type (4 bytes)
-set ::MSG_OFFSET_LENGTH 8     ;# Data length (4 bytes)
-set ::MSG_OFFSET_STATUS 12    ;# Status/Response code (4 bytes)
-set ::MSG_OFFSET_DATA 16      ;# Message data starts here
+# Command bit positions in command register
+set ::CMD_BIT_INIT 0          ;# Bit 0: INIT command
+set ::CMD_BIT_RUN_APP 1       ;# Bit 1: RUN_APP command
+set ::CMD_BIT_SET_PARAM 2     ;# Bit 2: SET_PARAM command
+set ::CMD_BIT_GET_STATUS 3    ;# Bit 3: GET_STATUS command
+set ::CMD_BIT_CAPTURE_RAM 4   ;# Bit 4: CAPTURE_RAM command
+set ::CMD_BIT_SET_CONFIG 5    ;# Bit 5: SET_CONFIG command
+set ::CMD_BIT_GET_CONFIG 6    ;# Bit 6: GET_CONFIG command
+set ::CMD_BIT_EXIT 7          ;# Bit 7: EXIT command
 
-# Magic number for message validation
-set ::MSG_MAGIC_NUMBER 0xDEADBEEF
-
-# Message types
-set ::MSG_TYPE_INIT 1
-set ::MSG_TYPE_RUN_APP 2
-set ::MSG_TYPE_SET_PARAM 3
-set ::MSG_TYPE_GET_STATUS 4
-set ::MSG_TYPE_CAPTURE_RAM 5
-set ::MSG_TYPE_SET_CONFIG 6
-set ::MSG_TYPE_GET_CONFIG 7
-set ::MSG_TYPE_EXIT 8
-set ::MSG_TYPE_RESPONSE 9
-set ::MSG_TYPE_ERROR 10
-
-# Status codes
-set ::MSG_STATUS_SUCCESS 0
-set ::MSG_STATUS_ERROR 1
-set ::MSG_STATUS_BUSY 2
-set ::MSG_STATUS_TIMEOUT 3
-set ::MSG_STATUS_INVALID 4
+# Response register values
+set ::RESP_SUCCESS 0x00000001  ;# Success response
+set ::RESP_ERROR 0x00000002    ;# Error response
+set ::RESP_BUSY 0x00000004     ;# Busy response
+set ::RESP_READY 0x00000008    ;# Ready response
 
 # Configuration parameter types
 set ::CONFIG_TYPE_STRING 1
 set ::CONFIG_TYPE_HEX 2
 set ::CONFIG_TYPE_LIST 3
 
-# Initialize shared memory communication
+#--------------------------------------------------------------------
+# This function initializes shared memory communication
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc init_shared_memory {} {
     global shared_mem_base shared_mem_size
     
@@ -62,166 +55,172 @@ proc init_shared_memory {} {
     return 1
 }
 
-# Write message header to shared memory
-proc write_message_header {msg_type data_length status} {
-    global shared_mem_base MSG_MAGIC_NUMBER
-    global MSG_OFFSET_MAGIC MSG_OFFSET_TYPE MSG_OFFSET_LENGTH MSG_OFFSET_STATUS
-    
-    set base_addr $shared_mem_base
-    
-    # Write magic number
-    mwr [expr $base_addr + $MSG_OFFSET_MAGIC] $MSG_MAGIC_NUMBER
-    
-    # Write message type
-    mwr [expr $base_addr + $MSG_OFFSET_TYPE] $msg_type
-    
-    # Write data length
-    mwr [expr $base_addr + $MSG_OFFSET_LENGTH] $data_length
-    
-    # Write status
-    mwr [expr $base_addr + $MSG_OFFSET_STATUS] $status
-    
-    log_message "Message header written: type=$msg_type, length=$data_length, status=$status"
-}
-
-# Read message header from shared memory
-proc read_message_header {} {
-    global shared_mem_base MSG_MAGIC_NUMBER
-    global MSG_OFFSET_MAGIC MSG_OFFSET_TYPE MSG_OFFSET_LENGTH MSG_OFFSET_STATUS
-    
-    set base_addr $shared_mem_base
-    
-    # Read header fields
-    set magic [mrd [expr $base_addr + $MSG_OFFSET_MAGIC]]
-    set msg_type [mrd [expr $base_addr + $MSG_OFFSET_TYPE]]
-    set data_length [mrd [expr $base_addr + $MSG_OFFSET_LENGTH]]
-    set status [mrd [expr $base_addr + $MSG_OFFSET_STATUS]]
-    
-    # Validate magic number
-    if {$magic != $MSG_MAGIC_NUMBER} {
-        return [list 0 0 0 0]  ;# Invalid message
-    }
-    
-    return [list $msg_type $data_length $status $magic]
-}
-
-# Write message data to shared memory
-proc write_message_data {data} {
-    global shared_mem_base MSG_OFFSET_DATA MSG_DATA_SIZE
+#--------------------------------------------------------------------
+# This function writes data to the shared memory data area
+#
+#--------------------------------------------------------------------
+#
+# param data: Data string to write to data area
+#--------------------------------------------------------------------
+proc write_data_area {data} {
+    global shared_mem_base DATA_AREA_OFFSET shared_mem_size
     
     set data_length [string length $data]
-    if {$data_length > $MSG_DATA_SIZE} {
-        puts "ERROR: Message data too large ($data_length > $MSG_DATA_SIZE)"
+    set max_data_size [expr $shared_mem_size - $DATA_AREA_OFFSET]
+    
+    if {$data_length > $max_data_size} {
+        puts "ERROR: Data too large ($data_length > $max_data_size)"
         return 0
     }
     
-    set base_addr [expr $shared_mem_base + $MSG_OFFSET_DATA]
+    set base_addr [expr $shared_mem_base + $DATA_AREA_OFFSET]
     
-    # Convert string to hex and write to memory
-    set hex_data [binary encode hex $data]
-    set hex_length [string length $hex_data]
-    
-    # Write data in 4-byte chunks
-    for {set i 0} {$i < $hex_length} {incr i 8} {
-        set chunk [string range $hex_data $i [expr $i + 7]]
-        if {[string length $chunk] < 8} {
-            set chunk [format "%08s" $chunk]
-            regsub -all " " $chunk "0" chunk
+    # Write data as string (null-terminated)
+    # Write in 4-byte chunks
+    set i 0
+    while {$i < $data_length} {
+        set chunk 0
+        for {set j 0} {$j < 4 && ($i + $j) < $data_length} {incr j} {
+            set char [string index $data [expr $i + $j]]
+            set byte_val [expr {[scan $char %c] & 0xFF}]
+            set chunk [expr $chunk | ($byte_val << ($j * 8))]
         }
-        mwr [expr $base_addr + $i/2] 0x$chunk
+        mwr [expr $base_addr + $i] $chunk
+        incr i 4
     }
     
-    log_message "Message data written: $data_length bytes"
+    # Write null terminator
+    mwr [expr $base_addr + $i] 0
+    
+    log_message "Data written to data area: $data_length bytes"
     return 1
 }
 
-# Read message data from shared memory
-proc read_message_data {data_length} {
-    global shared_mem_base MSG_OFFSET_DATA
+#--------------------------------------------------------------------
+# This function reads data from the shared memory data area
+#
+#--------------------------------------------------------------------
+#
+# param max_length: Maximum number of bytes to read
+#--------------------------------------------------------------------
+proc read_data_area {max_length} {
+    global shared_mem_base DATA_AREA_OFFSET
     
-    set base_addr [expr $shared_mem_base + $MSG_OFFSET_DATA]
-    set hex_data ""
+    set base_addr [expr $shared_mem_base + $DATA_AREA_OFFSET]
+    set data ""
     
-    # Read data in 4-byte chunks
-    for {set i 0} {$i < $data_length} {incr i 4} {
+    # Read data in 4-byte chunks until null terminator or max length
+    for {set i 0} {$i < $max_length} {incr i 4} {
         set chunk [mrd [expr $base_addr + $i]]
-        set hex_chunk [format "%08X" $chunk]
-        append hex_data $hex_chunk
+        
+        # Extract bytes from chunk
+        for {set j 0} {$j < 4 && ($i + $j) < $max_length} {incr j} {
+            set byte_val [expr ($chunk >> ($j * 8)) & 0xFF]
+            if {$byte_val == 0} {
+                return $data
+            }
+            append data [format %c $byte_val]
+        }
     }
     
-    # Convert hex to string
-    set data [binary decode hex $hex_data]
-    
-    log_message "Message data read: $data_length bytes"
+    log_message "Data read from data area: [string length $data] bytes"
     return $data
 }
 
-# Send a message to the C application
+#--------------------------------------------------------------------
+# This function sends a message to the C application
+#
+#--------------------------------------------------------------------
+#
+# param msg_type: Command type (maps to bit position)
+# data: Optional data to write to data area
+#--------------------------------------------------------------------
 proc send_message {msg_type data {timeout 5000} {retries 3}} {
-    global shared_mem_base MSG_STATUS_SUCCESS MSG_STATUS_BUSY
+    global shared_mem_base CMD_REG_OFFSET RESP_REG_OFFSET
+    global CMD_BIT_INIT CMD_BIT_RUN_APP CMD_BIT_SET_PARAM CMD_BIT_GET_STATUS
+    global CMD_BIT_CAPTURE_RAM CMD_BIT_SET_CONFIG CMD_BIT_GET_CONFIG CMD_BIT_EXIT
     
     puts "Sending message: type=$msg_type, data='$data'"
     log_message "Sending message: type=$msg_type, data='$data'"
     
-    # Write message header
-    write_message_header $msg_type [string length $data] $MSG_STATUS_SUCCESS
-    
-    # Write message data
-    if {[string length $data] > 0} {
-        write_message_data $data
+    # Map command type to bit position
+    set bit_pos 0
+    switch $msg_type {
+        $CMD_BIT_INIT { set bit_pos $CMD_BIT_INIT }
+        $CMD_BIT_RUN_APP { set bit_pos $CMD_BIT_RUN_APP }
+        $CMD_BIT_SET_PARAM { set bit_pos $CMD_BIT_SET_PARAM }
+        $CMD_BIT_GET_STATUS { set bit_pos $CMD_BIT_GET_STATUS }
+        $CMD_BIT_CAPTURE_RAM { set bit_pos $CMD_BIT_CAPTURE_RAM }
+        $CMD_BIT_SET_CONFIG { set bit_pos $CMD_BIT_SET_CONFIG }
+        $CMD_BIT_GET_CONFIG { set bit_pos $CMD_BIT_GET_CONFIG }
+        $CMD_BIT_EXIT { set bit_pos $CMD_BIT_EXIT }
+        default {
+            puts "ERROR: Unknown command type: $msg_type"
+            return "ERROR: Unknown command type"
+        }
     }
+    
+    # Write data to data area if provided
+    if {[string length $data] > 0} {
+        write_data_area $data
+    }
+    
+    # Set the appropriate bit in command register
+    set cmd_reg_addr [expr $shared_mem_base + $CMD_REG_OFFSET]
+    set cmd_value [expr 1 << $bit_pos]
+    mwr $cmd_reg_addr $cmd_value
+    
+    log_message "Command bit $bit_pos set in command register: 0x[format %08X $cmd_value]"
     
     # Wait for response
     set response [wait_for_message_response $timeout $retries]
     
+    # Clear command register after processing
+    mwr $cmd_reg_addr 0
+    
     return $response
 }
 
-proc send_timestamp {} {
-    # Write formatted timestamp string
-    set base_addr 0x10000000
-    set timestamp [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
-
-    # Write string bytes into shared memory
-    set addr $base_addr
-    foreach ch [split $timestamp ""] {
-        set val [scan $ch "%c"]
-        mwr $addr $val
-        incr addr
-    }
-    mwr $addr 0x00  ;# null terminator
-    puts "Wrote timestamp: $timestamp"
-}
-
-# Wait for message response from C application
+#--------------------------------------------------------------------
+# This function waits for a message response from the C application
+#
+#--------------------------------------------------------------------
+#
+# param timeout: Timeout in milliseconds (default: 5000)
+# param retries: Number of retry attempts (default: 3)
+#--------------------------------------------------------------------
 proc wait_for_message_response {{timeout 5000} {retries 3}} {
-    global shared_mem_base MSG_TYPE_RESPONSE MSG_TYPE_ERROR
-    global MSG_STATUS_SUCCESS MSG_STATUS_ERROR MSG_STATUS_BUSY
+    global shared_mem_base RESP_REG_OFFSET
+    global RESP_SUCCESS RESP_ERROR RESP_BUSY RESP_READY
     
     puts "Waiting for message response..."
+    
+    set resp_reg_addr [expr $shared_mem_base + $RESP_REG_OFFSET]
     
     for {set attempt 1} {$attempt <= $retries} {incr attempt} {
         puts "Attempt $attempt of $retries"
         
         for {set i 0} {$i < [expr $timeout / 100]} {incr i} {
-            # Read message header
-            set header [read_message_header]
-            set msg_type [lindex $header 0]
-            set data_length [lindex $header 1]
-            set status [lindex $header 2]
+            # Read response register
+            set resp_value [mrd $resp_reg_addr]
             
-            if {$msg_type == $MSG_TYPE_RESPONSE && $status == $MSG_STATUS_SUCCESS} {
-                # Read response data
-                set response_data [read_message_data $data_length]
+            if {[expr $resp_value & $RESP_SUCCESS]} {
+                # Success response - read data if available
+                set response_data [read_data_area 1024]
                 puts "Response received: '$response_data'"
                 log_message "Response received: '$response_data'"
+                # Clear response register
+                mwr $resp_reg_addr 0
                 return $response_data
-            } elseif {$msg_type == $MSG_TYPE_ERROR} {
-                set error_data [read_message_data $data_length]
+            } elseif {[expr $resp_value & $RESP_ERROR]} {
+                # Error response - read error data
+                set error_data [read_data_area 1024]
                 puts "Error response: '$error_data'"
                 log_message "Error response: '$error_data'"
+                # Clear response register
+                mwr $resp_reg_addr 0
                 return "ERROR: $error_data"
-            } elseif {$status == $MSG_STATUS_BUSY} {
+            } elseif {[expr $resp_value & $RESP_BUSY]} {
                 # Application is busy, wait a bit more
                 after 100
                 continue
@@ -236,15 +235,22 @@ proc wait_for_message_response {{timeout 5000} {retries 3}} {
     
     puts "ERROR: No response after $retries attempts"
     log_message "ERROR: No response after $retries attempts"
+    # Clear response register
+    mwr $resp_reg_addr 0
     return "ERROR: Timeout"
 }
 
-# Send INIT command
+#--------------------------------------------------------------------
+# This function sends an INIT command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc send_init_command {} {
-    global MSG_TYPE_INIT
+    global CMD_BIT_INIT
     
     puts "Sending INIT command..."
-    set response [send_message $MSG_TYPE_INIT ""]
+    set response [send_message $CMD_BIT_INIT ""]
     
     if {[string match "ERROR:*" $response]} {
         puts "INIT command failed: $response"
@@ -255,12 +261,17 @@ proc send_init_command {} {
     }
 }
 
-# Send RUN_APP command
+#--------------------------------------------------------------------
+# This function sends a RUN_APP command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc send_run_app_command {} {
-    global MSG_TYPE_RUN_APP
+    global CMD_BIT_RUN_APP
     
     puts "Sending RUN_APP command..."
-    set response [send_message $MSG_TYPE_RUN_APP ""]
+    set response [send_message $CMD_BIT_RUN_APP ""]
     
     if {[string match "ERROR:*" $response]} {
         puts "RUN_APP command failed: $response"
@@ -271,13 +282,20 @@ proc send_run_app_command {} {
     }
 }
 
-# Send SET_PARAM command
+#--------------------------------------------------------------------
+# This function sends a SET_PARAM command to the C application
+#
+#--------------------------------------------------------------------
+#
+# param param_name: Parameter name to set
+# param param_value: Parameter value to set
+#--------------------------------------------------------------------
 proc send_set_param_command {param_name param_value} {
-    global MSG_TYPE_SET_PARAM
+    global CMD_BIT_SET_PARAM
     
     set param_data "$param_name $param_value"
     puts "Sending SET_PARAM command: $param_data"
-    set response [send_message $MSG_TYPE_SET_PARAM $param_data]
+    set response [send_message $CMD_BIT_SET_PARAM $param_data]
     
     if {[string match "ERROR:*" $response]} {
         puts "SET_PARAM command failed: $response"
@@ -288,12 +306,17 @@ proc send_set_param_command {param_name param_value} {
     }
 }
 
-# Send GET_STATUS command
+#--------------------------------------------------------------------
+# This function sends a GET_STATUS command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc send_get_status_command {} {
-    global MSG_TYPE_GET_STATUS
+    global CMD_BIT_GET_STATUS
     
     puts "Sending GET_STATUS command..."
-    set response [send_message $MSG_TYPE_GET_STATUS ""]
+    set response [send_message $CMD_BIT_GET_STATUS ""]
     
     if {[string match "ERROR:*" $response]} {
         puts "GET_STATUS command failed: $response"
@@ -304,12 +327,17 @@ proc send_get_status_command {} {
     }
 }
 
-# Send CAPTURE_RAM command
+#--------------------------------------------------------------------
+# This function sends a CAPTURE_RAM command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc send_capture_ram_command {} {
-    global MSG_TYPE_CAPTURE_RAM
+    global CMD_BIT_CAPTURE_RAM
     
     puts "Sending CAPTURE_RAM command..."
-    set response [send_message $MSG_TYPE_CAPTURE_RAM ""]
+    set response [send_message $CMD_BIT_CAPTURE_RAM ""]
     
     if {[string match "ERROR:*" $response]} {
         puts "CAPTURE_RAM command failed: $response"
@@ -320,13 +348,21 @@ proc send_capture_ram_command {} {
     }
 }
 
-# Send SET_CONFIG command
+#--------------------------------------------------------------------
+# This function sends a SET_CONFIG command to the C application
+#
+#--------------------------------------------------------------------
+#
+# param config_name: Configuration name to set
+# param config_value: Configuration value to set
+# param config_type: Configuration type (1=string, 2=hex, 3=list)
+#--------------------------------------------------------------------
 proc send_set_config_command {config_name config_value config_type} {
-    global MSG_TYPE_SET_CONFIG CONFIG_TYPE_STRING CONFIG_TYPE_HEX CONFIG_TYPE_LIST
+    global CMD_BIT_SET_CONFIG CONFIG_TYPE_STRING CONFIG_TYPE_HEX CONFIG_TYPE_LIST
     
     set config_data "$config_name|$config_value|$config_type"
     puts "Sending SET_CONFIG command: $config_data"
-    set response [send_message $MSG_TYPE_SET_CONFIG $config_data]
+    set response [send_message $CMD_BIT_SET_CONFIG $config_data]
     
     if {[string match "ERROR:*" $response]} {
         puts "SET_CONFIG command failed: $response"
@@ -337,12 +373,18 @@ proc send_set_config_command {config_name config_value config_type} {
     }
 }
 
-# Send GET_CONFIG command
+#--------------------------------------------------------------------
+# This function sends a GET_CONFIG command to the C application
+#
+#--------------------------------------------------------------------
+#
+# param config_name: Configuration name to get
+#--------------------------------------------------------------------
 proc send_get_config_command {config_name} {
-    global MSG_TYPE_GET_CONFIG
+    global CMD_BIT_GET_CONFIG
     
     puts "Sending GET_CONFIG command: $config_name"
-    set response [send_message $MSG_TYPE_GET_CONFIG $config_name]
+    set response [send_message $CMD_BIT_GET_CONFIG $config_name]
     
     if {[string match "ERROR:*" $response]} {
         puts "GET_CONFIG command failed: $response"
@@ -353,12 +395,17 @@ proc send_get_config_command {config_name} {
     }
 }
 
-# Send EXIT command
+#--------------------------------------------------------------------
+# This function sends an EXIT command to the C application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc send_exit_command {} {
-    global MSG_TYPE_EXIT
+    global CMD_BIT_EXIT
     
     puts "Sending EXIT command..."
-    set response [send_message $MSG_TYPE_EXIT ""]
+    set response [send_message $CMD_BIT_EXIT ""]
     
     if {[string match "ERROR:*" $response]} {
         puts "EXIT command failed: $response"
@@ -369,7 +416,12 @@ proc send_exit_command {} {
     }
 }
 
-# Clear shared memory
+#--------------------------------------------------------------------
+# This function clears the shared memory region
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc clear_shared_memory {} {
     global shared_mem_base shared_mem_size
     
@@ -378,22 +430,41 @@ proc clear_shared_memory {} {
     log_message "Shared memory cleared"
 }
 
-# Read shared memory status
+#--------------------------------------------------------------------
+# This function reads and displays the shared memory status
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc read_shared_memory_status {} {
-    global shared_mem_base
+    global shared_mem_base CMD_REG_OFFSET RESP_REG_OFFSET DATA_AREA_OFFSET
     
     puts "Reading shared memory status..."
     puts "Base address: 0x[format %08X $shared_mem_base]"
     
-    # Read first 64 bytes to show status
-    for {set i 0} {$i < 16} {incr i} {
-        set addr [expr $shared_mem_base + $i * 4]
+    # Read command register
+    set cmd_reg [mrd [expr $shared_mem_base + $CMD_REG_OFFSET]]
+    puts "Command Register (0x[format %08X [expr $shared_mem_base + $CMD_REG_OFFSET]]): 0x[format %08X $cmd_reg]"
+    
+    # Read response register
+    set resp_reg [mrd [expr $shared_mem_base + $RESP_REG_OFFSET]]
+    puts "Response Register (0x[format %08X [expr $shared_mem_base + $RESP_REG_OFFSET]]): 0x[format %08X $resp_reg]"
+    
+    # Read first few words of data area
+    puts "Data Area (first 4 words):"
+    for {set i 0} {$i < 4} {incr i} {
+        set addr [expr $shared_mem_base + $DATA_AREA_OFFSET + $i * 4]
         set value [mrd $addr]
-        puts "0x[format %08X $addr]: 0x[format %08X $value]"
+        puts "  0x[format %08X $addr]: 0x[format %08X $value]"
     }
 }
 
-# Test shared memory communication
+#--------------------------------------------------------------------
+# This function tests shared memory communication
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc test_shared_memory {} {
     puts "Testing shared memory communication..."
     
@@ -438,6 +509,13 @@ proc test_shared_memory {} {
 
 # Log message function (if not already defined)
 if {![info exists log_message]} {
+    #--------------------------------------------------------------------
+    # This function logs a message to the log file
+    #
+    #--------------------------------------------------------------------
+    #
+    # param message: Message string to log
+    #--------------------------------------------------------------------
     proc log_message {message} {
         global log_file
         
@@ -453,3 +531,5 @@ if {![info exists log_message]} {
 puts "Shared memory messages module loaded"
 puts "Base address: 0x[format %08X $::shared_mem_base]"
 puts "Size: 0x[format %08X $::shared_mem_size]"
+
+

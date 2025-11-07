@@ -48,7 +48,13 @@ set ::term_app      "device_runner_term.bat"
 set ::log_dir       "logs"
 set ::bit_file      ""
 
-# Parse INI configuration file
+#--------------------------------------------------------------------
+# This function parses an INI configuration file
+#
+#--------------------------------------------------------------------
+#
+# param ini_file: Path to the INI configuration file
+#--------------------------------------------------------------------
 proc parse_ini_file {ini_file} {
     global script_config_array
     
@@ -108,7 +114,14 @@ proc parse_ini_file {ini_file} {
     return 1
 }
 
-# Get INI configuration value
+#--------------------------------------------------------------------
+# This function gets an INI configuration value
+#
+#--------------------------------------------------------------------
+#
+# param key: Configuration key (with optional section prefix)
+# param default_value: Default value if key not found (default: "")
+#--------------------------------------------------------------------
 proc get_ini_config {key {default_value ""}} {
     global script_config_array
     
@@ -119,7 +132,13 @@ proc get_ini_config {key {default_value ""}} {
     }
 }
 
-# Get all INI configuration keys for a section
+#--------------------------------------------------------------------
+# This function gets all INI configuration keys for a section
+#
+#--------------------------------------------------------------------
+#
+# param section: Section name to get keys from
+#--------------------------------------------------------------------
 proc get_ini_section_keys {section} {
     global script_config_array
     set keys {}
@@ -131,7 +150,12 @@ proc get_ini_section_keys {section} {
     return $keys
 }
 
-# Parse command line arguments and return as array
+#--------------------------------------------------------------------
+# This function parses command line arguments and returns as array
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc parse_command_line_args {} {
     global argv ps_ref_clks
     
@@ -299,20 +323,14 @@ proc parse_command_line_args {} {
 
 }
 
-# Get command line arguments as array
-proc get_cmd_args {} {
-    global cmd_args_array
-    
-    # Parse command line arguments if not already done
-    if {![info exists cmd_args_array]} {
-        set cmd_args [parse_command_line_args]
-        array set cmd_args_array $cmd_args
-    }
-    
-    return [array get cmd_args_array]
-}
 
-# Get specific command line argument
+#--------------------------------------------------------------------
+# This function gets a specific command line argument
+#
+#--------------------------------------------------------------------
+#
+# param arg_name: Name of the argument to get
+#--------------------------------------------------------------------
 proc get_cmd_arg {arg_name} {
     global cmd_args_array
     
@@ -329,9 +347,14 @@ proc get_cmd_arg {arg_name} {
     }
 }
 
-############################################################################
-# proc: Puts function sends to stdout (and file if logging is on)          #
-############################################################################
+#--------------------------------------------------------------------
+# This function sends output to stdout and log file if logging is on
+#
+#--------------------------------------------------------------------
+#
+# param str: String to output
+# param nonewline: If 1, don't add newline (default: 0)
+#--------------------------------------------------------------------
 proc tool_puts {str {nonewline 0}} {
     global tool_log_fptr
 
@@ -355,9 +378,13 @@ proc tool_puts {str {nonewline 0}} {
 }
 
 
-############################################################################
-# proc: re-direct a tcp socket data to stdout                              #
-############################################################################
+#--------------------------------------------------------------------
+# This function redirects TCP socket data to stdout
+#
+#--------------------------------------------------------------------
+#
+# param tcl_chan_id: TCL channel ID for the TCP socket
+#--------------------------------------------------------------------
 proc tcp_socket_to_stdout {tcl_chan_id} {
     global tool_ready
     global tool_log_name
@@ -414,101 +441,128 @@ proc tcp_socket_to_stdout {tcl_chan_id} {
     #tool_puts "\n<-- redirect stdout exit" 1
 }
 
-# Device communication functions
-proc device_command {command {ret_main 1} {chk_error 1}} {
+#--------------------------------------------------------------------
+# This function parses a command string and sets register bit/value
+#
+#--------------------------------------------------------------------
+#
+# param command: Command string to parse and execute
+#--------------------------------------------------------------------
+proc device_command {command} {
     global log_file
-    global tool_tcl_chan_id
-    global tcl_error
-
-    set response ""
+    
+    # Default command register address
+    set command_addr 0xXXXX0000
     
     # Log the command
     log_message "Device Command: $command"
-
-    # force return to the main menu
-    if {$ret_main == 1} {
-        puts -nonewline $tool_tcl_chan_id "n~xxxxn"
-        flush $tool_tcl_chan_id
-    }
-
-    # check for error
-    if {$chk_error == 1} {
-        # set up a timeout script
-        set cancel_id [after 5000 { 
-            tool_puts "\n ERROR: No data from XLWP error checker!"
-            quit_tool 1
-        }]
-        
-        # send the command with error checking on
-        puts -nonewline $tool_tcl_chan_id $command
-        flush $tool_tcl_chan_id
-
-        # wait for the xlwp error check to get updated
-        vwait tcl_error
-
-        # cancel the timeout script since we got a response
-        after cancel $cancel_id
-    } else {
-        # send the command with error checking off
-        puts -nonewline $tool_tcl_chan_id $command
-        flush $tool_tcl_chan_id
+    
+    # Parse command string and map to register value
+    set cmd_value 0
+    set cmd_parts [split [string trim $command] " "]
+    set cmd_type [string tolower [lindex $cmd_parts 0]]
+    
+    # Map command strings to register values
+    switch -exact $cmd_type {
+        "init" {
+            set cmd_value 2
+        }
+        "run_app" {
+            set cmd_value 3
+        }
+        "get_status" {
+            set cmd_value 4
+        }
+        "capture_ram" {
+            set cmd_value 5
+        }
+        "exit" {
+            set cmd_value 8
+        }
+        "!esp!" {
+            # Special command for script mode
+            set cmd_value 0x00000001
+        }
+        default {
+            # Try to parse as numeric value
+            if {[string is integer -strict $cmd_type]} {
+                set cmd_value $cmd_type
+            } else {
+                # Unknown command - set bit 0 as generic trigger
+                set cmd_value 1
+                log_message "Unknown command, using generic trigger: $command"
+            }
+        }
     }
     
-    return $response
+    # Write command value to register
+    mwr $command_addr $cmd_value
+    
+    log_message "Command written to register 0x[format %08X $command_addr]: 0x[format %08X $cmd_value]"
+    
+    return ""
 }
 
-proc device_response {command {timeout 5000} {retries 3}} {
+#--------------------------------------------------------------------
+# This function parses a command and reads response from register
+#
+#--------------------------------------------------------------------
+#
+# param command: Command string to parse
+# param timeout: Timeout in milliseconds (default: 5000)
+#--------------------------------------------------------------------
+proc device_response {command {timeout 5000}} {
     global log_file
+    
+    # Default response register address
+    set response_addr 0xXXXX0004
     
     # Log the response request
     log_message "Requesting device response for: $command"
     
-    # Simulate device response based on command
+    # Parse command to determine what to read
+    set cmd_parts [split [string trim $command] " "]
+    set cmd_type [string tolower [lindex $cmd_parts 0]]
+    
+    # Wait for response with timeout
+    set response_value 0
+    set attempts 0
+    set max_attempts [expr {$timeout / 100}]
+    
+    while {$attempts < $max_attempts} {
+        set response_value [mrd $response_addr]
+        
+        # Check if response is ready (non-zero value)
+        if {$response_value != 0} {
+            break
+        }
+        
+        incr attempts
+        after 100
+    }
+    
+    # Format response based on command type
     set response ""
-    switch -glob $command {
-        "!esp!" {
-            set response "OK - Device in script mode"
-        }
-        "connect*" {
-            set response "Connected to localhost:3121"
-        }
-        "targets*" {
-            set response "1  ps7_cortexa9_0  arm  Cortex-A9 #0"
-        }
-        "rst*" {
-            set response "Reset completed successfully"
-        }
-        "run*" {
-            set response "Application running on target"
-        }
-        "stop*" {
-            set response "Application stopped"
-        }
+    switch -glob $cmd_type {
         "mrd*" {
-            # Simulate memory read response
-            set addr [lindex [split $command] 1]
+            # Memory read - return the value
+            set addr [lindex $cmd_parts 1]
             if {$addr != ""} {
-                set response "0x$addr: 0x[format %08X [expr {int(rand() * 0xFFFFFFFF)}]]"
+                set response "0x$addr: 0x[format %08X $response_value]"
             } else {
-                set response "Memory read error: invalid address"
+                set response "0x[format %08X $response_value]"
             }
         }
-        "mwr*" {
-            set response "Memory write completed"
-        }
-        "source*" {
-            set response "TCL script executed successfully"
+        "get_status" {
+            set response "Status: 0x[format %08X $response_value]"
         }
         default {
-            set response "Command response: $command"
+            set response "Response: 0x[format %08X $response_value]"
         }
     }
     
     # Log the response
     log_message "Device Response: $response"
-    
-    # Simulate processing delay
-    after 50
     
     return $response
 }
@@ -521,197 +575,15 @@ if {[file exists "messages.tcl"]} {
     puts "Warning: messages.tcl not found - shared memory communication disabled"
 }
 
-# Enhanced device command with shared memory support
-proc device_command_shared_memory {command {timeout 5000} {retries 3}} {
-    global log_file
-    
-    # Log the command
-    log_message "Shared Memory Device Command: $command (timeout: ${timeout}ms, retries: $retries)"
-    
-    set attempt 1
-    set success 0
-    set last_error ""
-    
-    while {$attempt <= $retries && !$success} {
-        puts "Attempt $attempt of $retries: $command"
-        
-        # Parse command and execute via shared memory
-        set cmd_parts [split $command " "]
-        set cmd_type [lindex $cmd_parts 0]
-        
-        switch $cmd_type {
-            "init" {
-                set success [send_init_command]
-                if {$success} {
-                    set response "INIT_OK"
-                } else {
-                    set last_error "INIT command failed"
-                }
-            }
-            "run_app" {
-                set success [send_run_app_command]
-                if {$success} {
-                    set response "RUN_OK"
-                } else {
-                    set last_error "RUN_APP command failed"
-                }
-            }
-            "set_param" {
-                set param_name [lindex $cmd_parts 1]
-                set param_value [lindex $cmd_parts 2]
-                set success [send_set_param_command $param_name $param_value]
-                if {$success} {
-                    set response "PARAM_SET_OK"
-                } else {
-                    set last_error "SET_PARAM command failed"
-                }
-            }
-            "get_status" {
-                set response [send_get_status_command]
-                if {![string match "ERROR:*" $response]} {
-                    set success 1
-                } else {
-                    set last_error $response
-                }
-            }
-            "capture_ram" {
-                set success [send_capture_ram_command]
-                if {$success} {
-                    set response "RAM_CAPTURE_OK"
-                } else {
-                    set last_error "CAPTURE_RAM command failed"
-                }
-            }
-            "set_config" {
-                set config_name [lindex $cmd_parts 1]
-                set config_value [lindex $cmd_parts 2]
-                set config_type [lindex $cmd_parts 3]
-                if {$config_type == ""} { set config_type 1 } ;# Default to string type
-                set success [send_set_config_command $config_name $config_value $config_type]
-                if {$success} {
-                    set response "CONFIG_SET_OK"
-                } else {
-                    set last_error "SET_CONFIG command failed"
-                }
-            }
-            "get_config" {
-                set config_name [lindex $cmd_parts 1]
-                set response [send_get_config_command $config_name]
-                if {![string match "ERROR:*" $response]} {
-                    set success 1
-                } else {
-                    set last_error $response
-                }
-            }
-            "exit" {
-                set success [send_exit_command]
-                if {$success} {
-                    set response "EXIT_OK"
-                } else {
-                    set last_error "EXIT command failed"
-                }
-            }
-            default {
-                set last_error "Unknown command: $cmd_type"
-            }
-        }
-        
-        if {!$success} {
-            puts "Command failed: $last_error"
-            log_message "Command attempt $attempt failed: $last_error"
-            incr attempt
-            after 100  ;# Brief delay before retry
-        } else {
-            puts "Command successful: $response"
-            log_message "Command attempt $attempt successful: $response"
-        }
-    }
-    
-    if {!$success} {
-        set error_msg "Command failed after $retries attempts: $last_error"
-        puts "ERROR: $error_msg"
-        log_message "ERROR: $error_msg"
-        return -code error $error_msg
-    }
-    
-    return $response
-}
 
-# Device status checking
-proc check_device_status {} {
-    global log_file
-    
-    log_message "Checking device status..."
-    
-    # Check if device is connected
-    set connect_response [device_command "connect -url localhost:3121"]
-    if {[string match "*Connected*" $connect_response]} {
-        puts "Device Status: Connected"
-        log_message "Device Status: Connected"
-        
-        # Check targets
-        set targets_response [device_command "targets"]
-        if {[string match "*ps7_cortexa9*" $targets_response]} {
-            puts "Target Status: Available"
-            log_message "Target Status: Available"
-            return 1
-        } else {
-            puts "Target Status: Not Available"
-            log_message "Target Status: Not Available"
-            return 0
-        }
-    } else {
-        puts "Device Status: Not Connected"
-        log_message "Device Status: Not Connected"
-        return 0
-    }
-}
-
-# Device initialization sequence
-proc initialize_device {} {
-    global log_file
-    
-    log_message "Initializing device..."
-    
-    # Step 1: Connect to device
-    puts "Step 1: Connecting to device..."
-    device_command "connect -url localhost:3121"
-    
-    # Step 2: Set target
-    puts "Step 2: Setting target..."
-    device_command "targets -set -filter {name =~ \"*ps7_cortexa9*\"}"
-    
-    # Step 3: Reset device
-    puts "Step 3: Resetting device..."
-    device_command "rst -processor"
-    
-    # Step 4: Place in script mode
-    puts "Step 4: Placing device in script mode..."
-    device_command "!esp!" 0 0
-    
-    puts "Device initialization completed"
-    log_message "Device initialization completed"
-}
-
-# Device cleanup sequence
-proc cleanup_device {} {
-    global log_file
-    
-    log_message "Cleaning up device..."
-    
-    # Step 1: Stop any running applications
-    puts "Step 1: Stopping applications..."
-    device_command "stop"
-    
-    # Step 2: Disconnect from device
-    puts "Step 2: Disconnecting from device..."
-    device_command "disconnect"
-    
-    puts "Device cleanup completed"
-    log_message "Device cleanup completed"
-}
-
-# Connect to device, reset cores and connect to target a53_0
+#--------------------------------------------------------------------
+# This function connects to device, resets cores and connects to target a53_0
+#
+#--------------------------------------------------------------------
+#
+# param hw_server_host: Hardware server hostname or IP address
+# param bit_file_path: Path to bit file for FPGA programming (optional)
+#--------------------------------------------------------------------
 proc conn_device {hw_server_host {bit_file_path ""}} {
     global log_file
     
@@ -737,11 +609,17 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     puts "Step 3: Resetting PSU..."
     rst -system
     after 1000
+
+    # Step 4: Find and Reset APU
+    targets -set -nocase -filter {name =~"APU*"}
+    puts "Step 4: Resetting APU..."
+    rst -processor
+    after 1000
     
     # Step 4: Initialize PSU
-    puts "Step 4: Initializing PSU..."
-    source psu_init.tcl
-    psu_init
+    #puts "Step 4: Initializing PSU..."
+    #source psu_init.tcl
+    #psu_init
     
     # Step 5: Program FPGA with bit file
     puts "Step 5: Programming FPGA..."
@@ -756,97 +634,76 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     } else {
         puts "Warning: No bit file specified for FPGA programming"
     }
+
+    # Step 6: Disabling debug firewall
+    configparams force-mem-access 1
     
-    # Step 6: Connect to target a53_0
-    puts "Step 6: Connecting to target a53_0..."
+    # Step 7: Connect to target a53_0
+    puts "Step 7: Connecting to target a53_0..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     
-    # Step 7: Verify target is ready
+    # Step 8: Verify target is ready
     rst -processor
-}
 
-# Read device DNA for log filename
-proc read_device_dna {enable} {
-    if {$enable == 1} {
-        device_command "11." 1 0
+    # Download FSBL
+    dow $fsbl_path
+    set bp_47_40_fsbl_bp [bpadd -addr &XFsbl_Exit]
+    con -block -timeout 60
+    bpremove $bp_47_40_fsbl_bp
+    
+
+    # Check if Microblaze is enabled
+    set microblaze_enabled 0
+    if {[info exists ::microblaze_enable]} {
+        set microblaze_enabled $::microblaze_enable
+    } elseif {[info exists ::script_config_array]} {
+        set microblaze_enabled [get_ini_config "microblaze.enable" "0"]
     }
-    global log_file log_filename tool_ready
     
-    log_message "Reading device DNA with timeout: ${timeout}s"
-    puts "Reading device DNA..."
+    # Convert string values to boolean
+    if {[string is boolean -strict $microblaze_enabled]} {
+        set microblaze_enabled [expr {$microblaze_enabled ? 1 : 0}]
+    } elseif {[string equal -nocase $microblaze_enabled "true"] || [string equal -nocase $microblaze_enabled "yes"] || [string equal $microblaze_enabled "1"]} {
+        set microblaze_enabled 1
+    } else {
+        set microblaze_enabled 0
+    }
     
-    # Send command to read device DNA
-    set dna_cmd "mrd 0x00000000 0x1000"
-    set response [device_command $dna_cmd]
-    
-    # Parse the response to extract DNA
-    # Device DNA is typically 96-bit (12 bytes) starting at address 0x00000000
-    set dna_value ""
-    if {[string match "*0x00000000*" $response]} {
-        # Extract the DNA value from the response
-        # Format: 0x00000000: 0x12345678 0x9ABCDEF0 0x12345678
-        set lines [split $response "\n"]
-        foreach line $lines {
-            if {[string match "*0x00000000*" $line]} {
-                # Extract hex values from the line
-                set hex_values [regexp -all -inline {0x[0-9A-Fa-f]{8}} $line]
-                if {[llength $hex_values] >= 3} {
-                    # Take first 3 32-bit values for 96-bit DNA
-                    set dna_value "[lindex $hex_values 0][string range [lindex $hex_values 1] 2 end][string range [lindex $hex_values 2] 2 end]"
-                    break
-                }
-            }
+    # Setup MDM and Microblaze only if enabled
+    if {$microblaze_enabled} {
+        puts "Microblaze enabled - Setting up MDM and downloading Microblaze app..."
+        
+        # Setup MDM
+        configparams mdm-detect-bscan-mask 2
+
+        # Reset Microblaze
+        targets -set -nocase -filter {name =~ "*microblaze*#0" && bscan=="USER2" } 
+
+        # Download Microblaze App
+        if {[info exists mb_elf] && $mb_elf != ""} {
+            dow $mb_elf
+            after 1000
+            con
+        } else {
+            puts "Warning: Microblaze enabled but mb_elf not defined"
         }
-    }
-    
-    # If no DNA found, generate a simulated one
-    if {$dna_value == ""} {
-        set dna_value "0x[format %08X [expr {int(rand() * 0xFFFFFFFF)}]][format %08X [expr {int(rand() * 0xFFFFFFFF)}]][format %08X [expr {int(rand() * 0xFFFFFFFF)}]]"
-        puts "Generated simulated device DNA: $dna_value"
-        log_message "Generated simulated device DNA: $dna_value"
     } else {
-        puts "Device DNA read successfully: $dna_value"
-        log_message "Device DNA read successfully: $dna_value"
+        puts "Microblaze disabled - Skipping Microblaze setup"
     }
-    
-    # Append DNA value to existing log filename
-    if {[info exists log_filename] && $log_filename != ""} {
-        # Remove .log extension if present, append DNA, then add .log back
-        set base_name [file rootname $log_filename]
-        set log_filename "${base_name}_${dna_value}.log"
-    } else {
-        # Create new filename with DNA
-        set log_filename "device_dna_${dna_value}.log"
-    }
-    puts "Log filename with DNA: $log_filename"
-    log_message "Log filename with DNA: $log_filename"
-    
-    # Set tool ready flag
-    set tool_ready 1
-    
-    return $dna_value
+
+    # Reset A53
+    targets -set -nocase -filter {name =~ "*a53*#0"}
+    rst -processor
+
 }
 
-# Example usage of command line arguments
-proc example_cmd_args_usage {} {
-    # Get all command line arguments as array
-    set cmd_args [get_cmd_args]
-    array set args $cmd_args
-    
-    puts "Example: Using command line arguments"
-    puts "Architecture: $args(arch)"
-    puts "Mode: $args(mode)"
-    puts "Boot Mode: $args(boot_mode)"
-    puts "Hardware Server: $args(hw_server)"
-    
-    # Get specific argument
-    set xsdb_path [get_cmd_arg "xsdb_path"]
-    if {$xsdb_path != ""} {
-        puts "XSDB Path: $xsdb_path"
-    }
-}
 
-# Show help information
+#--------------------------------------------------------------------
+# This function shows help information
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc show_help {} {
     puts "Device Runner CLI - FPGA Application Runner"
     puts "Usage: device_runner_cli.tcl [options]"
@@ -888,7 +745,12 @@ proc show_help {} {
     puts "  device_runner_cli.tcl -jtag_tcp 192.168.1.100:3121"
 }
 
-# Initialize application
+#--------------------------------------------------------------------
+# This function initializes the application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc init_app {} {
     global app_name version
     
@@ -964,20 +826,25 @@ proc init_app {} {
         }
     }
 
-    # Determine Operating System
-    # set op_sys [lindex $tcl_platform(os) 0]
-    
-    # Check if OS is supported (Windows or Linux)
-    # if {[string match -nocase "*windows*" $op_sys]} {
-        # puts "Operating System: Windows - Supported"
-    # } elseif {[string match -nocase "*linux*" $op_sys]} {
-        # puts "Operating System: Linux - Supported"
-        # set term_app "./${term_app}"
-    # } else {
-        # puts "ERROR: Unsupported operating system: $op_sys"
-        # puts "This tool only supports Windows and Linux"
-        # exit 1
-    # }
+    # If script mode is enabled, parse INI file and get hardware server and bit file
+    if {$mode == "script" && $::script_mode_enabled} {
+        puts "Parsing INI configuration file for script mode..."
+        if {![parse_ini_file $::script_config_file]} {
+            puts "ERROR: Failed to parse INI file: $::script_config_file"
+            exit 1
+        }
+        
+        # Get hardware server and bit file from INI file
+        set ini_hw_server [get_ini_config "connection.hw_server" $hw_server]
+        set ini_bit_file [get_ini_config "fpga.bit_file" $::bit_file]
+        
+        puts "Hardware server from INI: $ini_hw_server"
+        puts "Bit file from INI: $ini_bit_file"
+        
+        # Use INI values
+        set hw_server $ini_hw_server
+        set ::bit_file $ini_bit_file
+    }
 
     # Connect to device, reset cores and connect to target a53_0
     conn_device $hw_server $::bit_file
@@ -1018,77 +885,15 @@ proc init_app {} {
 
     } elseif {$mode == "script"} {
         puts "Mode: Script - Automated operation"
+        puts "Running INI-based script mode..."
+        run_script_mode_from_ini $::script_config_file
         
-        # Check if INI-based script mode is enabled
-        if {$::script_mode_enabled} {
-            puts "Running INI-based script mode..."
-            run_script_mode_from_ini $::script_config_file
-        } else {
-            # Original script mode with terminal application
-            if {[catch {set tcl_chan_id [socket localhost $tcp_port_num]} err]} {
-                after 10000
-                set tcl_chan_id [socket localhost $tcp_port_num]
-            }
-
-            puts "Configure Tcl Channel..."
-            fconfigure $tcl_chan_id -buffering none -blocking 0 t-translation auto
-
-            puts "Setting up stdout fileevent..."
-            fileevent $tcl_chan_id readable "tcp_socket_to_stdout $tcl_chan_id"
-
-            if {$boot_mode == "jtag"} {
-                puts "Downloading Device Application .elf file"
-                dow $app_elf
-            }
-            puts "Place A53_0 into execution state..."
-            con
-
-            puts "Placing Tool into script mode..."
-            device_command "!esp!" 0 0
-
-            puts "Waiting until tool is done with initialization...\n"
-            set tool_ready 0
-            after 5000 {if {$tool_ready == 0} {
-                puts "\n\n ERROR: Tool did not initialize"
-                exit 1
-            }}
-
-            vwait tool_ready
-            puts "\n\n Tool has finished initializing..."
-            if {$log_dir != ""} {
-                puts "\tCreating script-mode log file..."
-                # Create log directory if it doesn't exist
-                if {[file isdirectory $log_dir] == 0} {
-                    file mkdir $log_dir
-                }
-
-                # Set log file name to indicate script mode Logging
-                set log_filename "tlf"
-
-                # Attempt to get device dna for log filename
-                read_device_dna 1
-
-                after 5000 {if {$log_filename == "tlf"} {
-                    puts "\n\n ERROR: Could not read device DNA for log file!"
-                    exit 1
-                }}
-
-                vwait log_filename
-
-                # Create filename based on dna data and current time
-                if {($log_filename != "tlf") && ($log_filename != "") && \
-                    ([string length $log_filename] == 24) && \
-                    ([string is xdigit $log_filename] == 1)} {
-                        set log_filename "${log_dir}/${log_filename}_[string toupper \
-                            [clock format [clock seconds] \
-                            -format "%d_%b_%Y_%H_%M_%S"]].log"
-                        set tool_log_fptr [open $log_filename w]
-                    } else {
-                        puts "\n\n ERROR: Could not create script log file!\n"
-                        exit 1
-                    }
-            }
+        if {$boot_mode == "jtag"} {
+            puts "Downloading Device Application .elf file"
+            dow $app_elf
         }
+        puts "Place A53_0 into execution state..."
+        con
     } else {
         puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
         log_message "ERROR: Invalid mode '$mode'"
@@ -1106,13 +911,23 @@ proc init_app {} {
     
 }
 
-# Clear screen
+#--------------------------------------------------------------------
+# This function clears the screen
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc clear_screen {} {
     # Clear screen (works on most terminals)
     puts "\033\[2J\033\[H"
 }
 
-# Show ASCII art banner
+#--------------------------------------------------------------------
+# This function shows the ASCII art banner
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc show_banner {} {
     puts ""
     puts "########  ######## ##     ## ####  ######  ########     ######  ##       #### "
@@ -1131,7 +946,12 @@ proc show_banner {} {
 }
 
 
-# View logs
+#--------------------------------------------------------------------
+# This function displays recent log entries
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc view_logs {} {
     global log_file
     
@@ -1168,7 +988,12 @@ proc view_logs {} {
 }
 
 
-# Exit application
+#--------------------------------------------------------------------
+# This function exits the application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc exit_application {} {
     puts ""
     puts -nonewline "Quit Device Runner CLI? (y/[n]) -> "
@@ -1186,9 +1011,13 @@ proc exit_application {} {
     }
 }
 
-############################################################################
-# proc: quit tool tool                                                     #
-############################################################################
+#--------------------------------------------------------------------
+# This function quits the tool
+#
+#--------------------------------------------------------------------
+#
+# param exit_code: Exit code (0=success, 1=error)
+#--------------------------------------------------------------------
 proc quit_tool {exit_code} {
     global tool_tcl_chan_id
     global tool_script
@@ -1267,7 +1096,13 @@ proc quit_tool {exit_code} {
     exit $exit_code
 }
 
-# Log message
+#--------------------------------------------------------------------
+# This function logs a message to the log file
+#
+#--------------------------------------------------------------------
+#
+# param message: Message string to log
+#--------------------------------------------------------------------
 proc log_message {message} {
     global log_file
     
@@ -1279,7 +1114,15 @@ proc log_message {message} {
     }
 }
 
-# Generate BOOT.bin with archiving functionality
+#--------------------------------------------------------------------
+# This function generates BOOT.bin with archiving functionality
+#
+#--------------------------------------------------------------------
+#
+# param output_bin: Output BOOT.bin file path (default: "./BOOT.bin")
+# param bif_file: BIF file path (default: "./boot.bif")
+# param arch: Target architecture (default: "zynqmp")
+#--------------------------------------------------------------------
 proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch "zynqmp"}} {
     # Check if a previous BOOT.bin exists
     if {[file exists $output_bin]} {
@@ -1304,7 +1147,13 @@ proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch 
     puts "New BOOT.bin created at $output_bin"
 }
 
-# INI-based Script Mode Handler
+#--------------------------------------------------------------------
+# This function runs INI-based script mode
+#
+#--------------------------------------------------------------------
+#
+# param ini_file: Path to INI configuration file
+#--------------------------------------------------------------------
 proc run_script_mode_from_ini {ini_file} {
     global script_config_array script_mode_enabled
     
@@ -1369,7 +1218,12 @@ proc run_script_mode_from_ini {ini_file} {
     return 1
 }
 
-# Execute script commands from INI configuration
+#--------------------------------------------------------------------
+# This function executes script commands from INI configuration
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc execute_script_commands_from_ini {} {
     global script_config_array
     
@@ -1394,7 +1248,13 @@ proc execute_script_commands_from_ini {} {
     }
 }
 
-# Execute individual script command
+#--------------------------------------------------------------------
+# This function executes an individual script command
+#
+#--------------------------------------------------------------------
+#
+# param command: Command string to execute
+#--------------------------------------------------------------------
 proc execute_script_command {command} {
     global script_config_array
     
@@ -1460,7 +1320,14 @@ proc execute_script_command {command} {
     }
 }
 
-# Wait for response from device
+#--------------------------------------------------------------------
+# This function waits for response from device
+#
+#--------------------------------------------------------------------
+#
+# param response_addr: Response register address
+# param timeout: Timeout in milliseconds
+#--------------------------------------------------------------------
 proc wait_for_response {response_addr timeout} {
     puts "Waiting for response from address: $response_addr"
     
@@ -1479,7 +1346,16 @@ proc wait_for_response {response_addr timeout} {
     return 0
 }
 
-# JTAG UART Communication Function
+#--------------------------------------------------------------------
+# This function handles JTAG UART communication
+#
+#--------------------------------------------------------------------
+#
+# param hw_server_host: Hardware server hostname or IP address
+# param command_addr: Command register address (default: "0xXXXX0000")
+# param response_addr: Response register address (default: "0xXXXX0004")
+# param log_file: Log file path (default: "hostlog.txt")
+#--------------------------------------------------------------------
 proc jtag_uart_communication {hw_server_host {command_addr "0xXXXX0000"} {response_addr "0xXXXX0004"} {log_file "hostlog.txt"}} {
     global log_file
     
@@ -1526,7 +1402,12 @@ proc jtag_uart_communication {hw_server_host {command_addr "0xXXXX0000"} {respon
     puts "JTAG UART communication completed"
 }
 
-# Test shared memory communication
+#--------------------------------------------------------------------
+# This function tests shared memory communication
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc test_shared_memory_communication {} {
     puts "=== Testing Shared Memory Communication ==="
     
@@ -1584,3 +1465,4 @@ proc test_shared_memory_communication {} {
 if {[file tail $argv0] == [file tail [info script]]} {
     init_app
 }
+
