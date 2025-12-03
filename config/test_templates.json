@@ -4,18 +4,30 @@
       "description": "Verify correct boot data is printed",
       "uart_patterns": [
         {
+          "name": "Data Check",
+          "mandatory": true,
+          "allow_regex_override": false,
           "regex": "Data:\\s*(0x[0-9A-Fa-f]+),\\s*(0x[0-9A-Fa-f]+)",
           "expected": [["0x12345678", "0xDEADBEEF"]]
         },
         {
+          "name": "Version Check",
+          "mandatory": false,
+          "allow_regex_override": false,
           "regex": "Version:\\s*v(\\d\\.\\d)",
           "expected": ["v1.2"]
         },
         {
+          "name": "Boot Start",
+          "mandatory": false,
+          "allow_regex_override": false,
           "regex": "Boot sequence started",
           "expected": ["Boot sequence started"]
         },
         {
+          "name": "Memory Dump",
+          "mandatory": true,
+          "allow_regex_override": true,
           "regex": "^(.+)\\n(\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\",\\s*\"0x[0-9A-Fa-f]{8}\")$",
           "expected": [["Memory Dump", "\"0x12345678\", \"0xDEADBEEF\", \"0xABCDEF01\", \"0x98765432\", \"0x11111111\", \"0x22222222\""]]
         }
@@ -26,6 +38,9 @@
       "description": "Test multiple power cycles",
       "uart_patterns": [
         {
+          "name": "Ready Signal",
+          "mandatory": true,
+          "allow_regex_override": false,
           "regex": "READY",
           "expected": ["READY"]
         }
@@ -36,10 +51,16 @@
       "description": "Full test with all patterns",
       "uart_patterns": [
         {
+          "name": "Data Check",
+          "mandatory": true,
+          "allow_regex_override": true,
           "regex": "Boot:\\s*(\\w+)",
           "expected": ["success"]
         },
         {
+          "name": "Status Check",
+          "mandatory": true,
+          "allow_regex_override": false,
           "regex": "Status:\\s*(\\w+)",
           "expected": ["OK"]
         }
@@ -50,6 +71,9 @@
       "description": "Simple ready signal test",
       "uart_patterns": [
         {
+          "name": "Ready Signal",
+          "mandatory": true,
+          "allow_regex_override": false,
           "regex": "READY",
           "expected": ["READY"]
         }
@@ -60,6 +84,9 @@
       "description": "Check firmware version",
       "uart_patterns": [
         {
+          "name": "Version Check",
+          "mandatory": true,
+          "allow_regex_override": false,
           "regex": "Version:\\s*v(\\d+\\.\\d+)",
           "expected": ["v1.0", "v1.1", "v1.2"]
         }

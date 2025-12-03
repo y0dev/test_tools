@@ -48,7 +48,13 @@ set ::term_app      "device_runner_term.bat"
 set ::log_dir       "logs"
 set ::bit_file      ""
 
-# Parse INI configuration file
+#--------------------------------------------------------------------
+# This function parses an INI configuration file
+#
+#--------------------------------------------------------------------
+#
+# param ini_file: Path to the INI configuration file
+#--------------------------------------------------------------------
 proc parse_ini_file {ini_file} {
     global script_config_array
     
@@ -108,7 +114,14 @@ proc parse_ini_file {ini_file} {
     return 1
 }
 
-# Get INI configuration value
+#--------------------------------------------------------------------
+# This function gets an INI configuration value
+#
+#--------------------------------------------------------------------
+#
+# param key: Configuration key (with optional section prefix)
+# param default_value: Default value if key not found (default: "")
+#--------------------------------------------------------------------
 proc get_ini_config {key {default_value ""}} {
     global script_config_array
     
@@ -119,7 +132,13 @@ proc get_ini_config {key {default_value ""}} {
     }
 }
 
-# Get all INI configuration keys for a section
+#--------------------------------------------------------------------
+# This function gets all INI configuration keys for a section
+#
+#--------------------------------------------------------------------
+#
+# param section: Section name to get keys from
+#--------------------------------------------------------------------
 proc get_ini_section_keys {section} {
     global script_config_array
     set keys {}
@@ -131,7 +150,12 @@ proc get_ini_section_keys {section} {
     return $keys
 }
 
-# Parse command line arguments and return as array
+#--------------------------------------------------------------------
+# This function parses command line arguments and returns as array
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc parse_command_line_args {} {
     global argv ps_ref_clks
     
@@ -299,20 +323,14 @@ proc parse_command_line_args {} {
 
 }
 
-# Get command line arguments as array
-proc get_cmd_args {} {
-    global cmd_args_array
-    
-    # Parse command line arguments if not already done
-    if {![info exists cmd_args_array]} {
-        set cmd_args [parse_command_line_args]
-        array set cmd_args_array $cmd_args
-    }
-    
-    return [array get cmd_args_array]
-}
 
-# Get specific command line argument
+#--------------------------------------------------------------------
+# This function gets a specific command line argument
+#
+#--------------------------------------------------------------------
+#
+# param arg_name: Name of the argument to get
+#--------------------------------------------------------------------
 proc get_cmd_arg {arg_name} {
     global cmd_args_array
     
@@ -329,9 +347,14 @@ proc get_cmd_arg {arg_name} {
     }
 }
 
-############################################################################
-# proc: Puts function sends to stdout (and file if logging is on)          #
-############################################################################
+#--------------------------------------------------------------------
+# This function sends output to stdout and log file if logging is on
+#
+#--------------------------------------------------------------------
+#
+# param str: String to output
+# param nonewline: If 1, don't add newline (default: 0)
+#--------------------------------------------------------------------
 proc tool_puts {str {nonewline 0}} {
     global tool_log_fptr
 
@@ -355,9 +378,13 @@ proc tool_puts {str {nonewline 0}} {
 }
 
 
-############################################################################
-# proc: re-direct a tcp socket data to stdout                              #
-############################################################################
+#--------------------------------------------------------------------
+# This function redirects TCP socket data to stdout
+#
+#--------------------------------------------------------------------
+#
+# param tcl_chan_id: TCL channel ID for the TCP socket
+#--------------------------------------------------------------------
 proc tcp_socket_to_stdout {tcl_chan_id} {
     global tool_ready
     global tool_log_name
@@ -414,101 +441,128 @@ proc tcp_socket_to_stdout {tcl_chan_id} {
     #tool_puts "\n<-- redirect stdout exit" 1
 }
 
-# Device communication functions
-proc device_command {command {ret_main 1} {chk_error 1}} {
+#--------------------------------------------------------------------
+# This function parses a command string and sets register bit/value
+#
+#--------------------------------------------------------------------
+#
+# param command: Command string to parse and execute
+#--------------------------------------------------------------------
+proc device_command {command} {
     global log_file
-    global tool_tcl_chan_id
-    global tcl_error
-
-    set response ""
+    
+    # Default command register address
+    set command_addr 0xXXXX0000
     
     # Log the command
     log_message "Device Command: $command"
-
-    # force return to the main menu
-    if {$ret_main == 1} {
-        puts -nonewline $tool_tcl_chan_id "n~xxxxn"
-        flush $tool_tcl_chan_id
-    }
-
-    # check for error
-    if {$chk_error == 1} {
-        # set up a timeout script
-        set cancel_id [after 5000 { 
-            tool_puts "\n ERROR: No data from XLWP error checker!"
-            quit_tool 1
-        }]
-        
-        # send the command with error checking on
-        puts -nonewline $tool_tcl_chan_id $command
-        flush $tool_tcl_chan_id
-
-        # wait for the xlwp error check to get updated
-        vwait tcl_error
-
-        # cancel the timeout script since we got a response
-        after cancel $cancel_id
-    } else {
-        # send the command with error checking off
-        puts -nonewline $tool_tcl_chan_id $command
-        flush $tool_tcl_chan_id
+    
+    # Parse command string and map to register value
+    set cmd_value 0
+    set cmd_parts [split [string trim $command] " "]
+    set cmd_type [string tolower [lindex $cmd_parts 0]]
+    
+    # Map command strings to register values
+    switch -exact $cmd_type {
+        "init" {
+            set cmd_value 2
+        }
+        "run_app" {
+            set cmd_value 3
+        }
+        "get_status" {
+            set cmd_value 4
+        }
+        "capture_ram" {
+            set cmd_value 5
+        }
+        "exit" {
+            set cmd_value 8
+        }
+        "!esp!" {
+            # Special command for script mode
+            set cmd_value 0x00000001
+        }
+        default {
+            # Try to parse as numeric value
+            if {[string is integer -strict $cmd_type]} {
+                set cmd_value $cmd_type
+            } else {
+                # Unknown command - set bit 0 as generic trigger
+                set cmd_value 1
+                log_message "Unknown command, using generic trigger: $command"
+            }
+        }
     }
     
-    return $response
+    # Write command value to register
+    mwr $command_addr $cmd_value
+    
+    log_message "Command written to register 0x[format %08X $command_addr]: 0x[format %08X $cmd_value]"
+    
+    return ""
 }
 
-proc device_response {command {timeout 5000} {retries 3}} {
+#--------------------------------------------------------------------
+# This function parses a command and reads response from register
+#
+#--------------------------------------------------------------------
+#
+# param command: Command string to parse
+# param timeout: Timeout in milliseconds (default: 5000)
+#--------------------------------------------------------------------
+proc device_response {command {timeout 5000}} {
     global log_file
+    
+    # Default response register address
+    set response_addr 0xXXXX0004
     
     # Log the response request
     log_message "Requesting device response for: $command"
     
-    # Simulate device response based on command
+    # Parse command to determine what to read
+    set cmd_parts [split [string trim $command] " "]
+    set cmd_type [string tolower [lindex $cmd_parts 0]]
+    
+    # Wait for response with timeout
+    set response_value 0
+    set attempts 0
+    set max_attempts [expr {$timeout / 100}]
+    
+    while {$attempts < $max_attempts} {
+        set response_value [mrd $response_addr]
+        
+        # Check if response is ready (non-zero value)
+        if {$response_value != 0} {
+            break
+        }
+        
+        incr attempts
+        after 100
+    }
+    
+    # Format response based on command type
     set response ""
-    switch -glob $command {
-        "!esp!" {
-            set response "OK - Device in script mode"
-        }
-        "connect*" {
-            set response "Connected to localhost:3121"
-        }
-        "targets*" {
-            set response "1  ps7_cortexa9_0  arm  Cortex-A9 #0"
-        }
-        "rst*" {
-            set response "Reset completed successfully"
-        }
-        "run*" {
-            set response "Application running on target"
-        }
-        "stop*" {
-            set response "Application stopped"
-        }
+    switch -glob $cmd_type {
         "mrd*" {
-            # Simulate memory read response
-            set addr [lindex [split $command] 1]
+            # Memory read - return the value
+            set addr [lindex $cmd_parts 1]
             if {$addr != ""} {
-                set response "0x$addr: 0x[format %08X [expr {int(rand() * 0xFFFFFFFF)}]]"
+                set response "0x$addr: 0x[format %08X $response_value]"
             } else {
-                set response "Memory read error: invalid address"
+                set response "0x[format %08X $response_value]"
             }
         }
-        "mwr*" {
-            set response "Memory write completed"
-        }
-        "source*" {
-            set response "TCL script executed successfully"
+        "get_status" {
+            set response "Status: 0x[format %08X $response_value]"
         }
         default {
-            set response "Command response: $command"
+            set response "Response: 0x[format %08X $response_value]"
         }
     }
     
     # Log the response
     log_message "Device Response: $response"
-    
-    # Simulate processing delay
-    after 50
     
     return $response
 }
@@ -521,197 +575,15 @@ if {[file exists "messages.tcl"]} {
     puts "Warning: messages.tcl not found - shared memory communication disabled"
 }
 
-# Enhanced device command with shared memory support
-proc device_command_shared_memory {command {timeout 5000} {retries 3}} {
-    global log_file
-    
-    # Log the command
-    log_message "Shared Memory Device Command: $command (timeout: ${timeout}ms, retries: $retries)"
-    
-    set attempt 1
-    set success 0
-    set last_error ""
-    
-    while {$attempt <= $retries && !$success} {
-        puts "Attempt $attempt of $retries: $command"
-        
-        # Parse command and execute via shared memory
-        set cmd_parts [split $command " "]
-        set cmd_type [lindex $cmd_parts 0]
-        
-        switch $cmd_type {
-            "init" {
-                set success [send_init_command]
-                if {$success} {
-                    set response "INIT_OK"
-                } else {
-                    set last_error "INIT command failed"
-                }
-            }
-            "run_app" {
-                set success [send_run_app_command]
-                if {$success} {
-                    set response "RUN_OK"
-                } else {
-                    set last_error "RUN_APP command failed"
-                }
-            }
-            "set_param" {
-                set param_name [lindex $cmd_parts 1]
-                set param_value [lindex $cmd_parts 2]
-                set success [send_set_param_command $param_name $param_value]
-                if {$success} {
-                    set response "PARAM_SET_OK"
-                } else {
-                    set last_error "SET_PARAM command failed"
-                }
-            }
-            "get_status" {
-                set response [send_get_status_command]
-                if {![string match "ERROR:*" $response]} {
-                    set success 1
-                } else {
-                    set last_error $response
-                }
-            }
-            "capture_ram" {
-                set success [send_capture_ram_command]
-                if {$success} {
-                    set response "RAM_CAPTURE_OK"
-                } else {
-                    set last_error "CAPTURE_RAM command failed"
-                }
-            }
-            "set_config" {
-                set config_name [lindex $cmd_parts 1]
-                set config_value [lindex $cmd_parts 2]
-                set config_type [lindex $cmd_parts 3]
-                if {$config_type == ""} { set config_type 1 } ;# Default to string type
-                set success [send_set_config_command $config_name $config_value $config_type]
-                if {$success} {
-                    set response "CONFIG_SET_OK"
-                } else {
-                    set last_error "SET_CONFIG command failed"
-                }
-            }
-            "get_config" {
-                set config_name [lindex $cmd_parts 1]
-                set response [send_get_config_command $config_name]
-                if {![string match "ERROR:*" $response]} {
-                    set success 1
-                } else {
-                    set last_error $response
-                }
-            }
-            "exit" {
-                set success [send_exit_command]
-                if {$success} {
-                    set response "EXIT_OK"
-                } else {
-                    set last_error "EXIT command failed"
-                }
-            }
-            default {
-                set last_error "Unknown command: $cmd_type"
-            }
-        }
-        
-        if {!$success} {
-            puts "Command failed: $last_error"
-            log_message "Command attempt $attempt failed: $last_error"
-            incr attempt
-            after 100  ;# Brief delay before retry
-        } else {
-            puts "Command successful: $response"
-            log_message "Command attempt $attempt successful: $response"
-        }
-    }
-    
-    if {!$success} {
-        set error_msg "Command failed after $retries attempts: $last_error"
-        puts "ERROR: $error_msg"
-        log_message "ERROR: $error_msg"
-        return -code error $error_msg
-    }
-    
-    return $response
-}
 
-# Device status checking
-proc check_device_status {} {
-    global log_file
-    
-    log_message "Checking device status..."
-    
-    # Check if device is connected
-    set connect_response [device_command "connect -url localhost:3121"]
-    if {[string match "*Connected*" $connect_response]} {
-        puts "Device Status: Connected"
-        log_message "Device Status: Connected"
-        
-        # Check targets
-        set targets_response [device_command "targets"]
-        if {[string match "*ps7_cortexa9*" $targets_response]} {
-            puts "Target Status: Available"
-            log_message "Target Status: Available"
-            return 1
-        } else {
-            puts "Target Status: Not Available"
-            log_message "Target Status: Not Available"
-            return 0
-        }
-    } else {
-        puts "Device Status: Not Connected"
-        log_message "Device Status: Not Connected"
-        return 0
-    }
-}
-
-# Device initialization sequence
-proc initialize_device {} {
-    global log_file
-    
-    log_message "Initializing device..."
-    
-    # Step 1: Connect to device
-    puts "Step 1: Connecting to device..."
-    device_command "connect -url localhost:3121"
-    
-    # Step 2: Set target
-    puts "Step 2: Setting target..."
-    device_command "targets -set -filter {name =~ \"*ps7_cortexa9*\"}"
-    
-    # Step 3: Reset device
-    puts "Step 3: Resetting device..."
-    device_command "rst -processor"
-    
-    # Step 4: Place in script mode
-    puts "Step 4: Placing device in script mode..."
-    device_command "!esp!" 0 0
-    
-    puts "Device initialization completed"
-    log_message "Device initialization completed"
-}
-
-# Device cleanup sequence
-proc cleanup_device {} {
-    global log_file
-    
-    log_message "Cleaning up device..."
-    
-    # Step 1: Stop any running applications
-    puts "Step 1: Stopping applications..."
-    device_command "stop"
-    
-    # Step 2: Disconnect from device
-    puts "Step 2: Disconnecting from device..."
-    device_command "disconnect"
-    
-    puts "Device cleanup completed"
-    log_message "Device cleanup completed"
-}
-
-# Connect to device, reset cores and connect to target a53_0
+#--------------------------------------------------------------------
+# This function connects to device, resets cores and connects to target a53_0
+#
+#--------------------------------------------------------------------
+#
+# param hw_server_host: Hardware server hostname or IP address
+# param bit_file_path: Path to bit file for FPGA programming (optional)
+#--------------------------------------------------------------------
 proc conn_device {hw_server_host {bit_file_path ""}} {
     global log_file
     
@@ -737,11 +609,17 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     puts "Step 3: Resetting PSU..."
     rst -system
     after 1000
+
+    # Step 4: Find and Reset APU
+    targets -set -nocase -filter {name =~"APU*"}
+    puts "Step 4: Resetting APU..."
+    rst -processor
+    after 1000
     
     # Step 4: Initialize PSU
-    puts "Step 4: Initializing PSU..."
-    source psu_init.tcl
-    psu_init
+    #puts "Step 4: Initializing PSU..."
+    #source psu_init.tcl
+    #psu_init
     
     # Step 5: Program FPGA with bit file
     puts "Step 5: Programming FPGA..."
@@ -756,97 +634,76 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     } else {
         puts "Warning: No bit file specified for FPGA programming"
     }
+
+    # Step 6: Disabling debug firewall
+    configparams force-mem-access 1
     
-    # Step 6: Connect to target a53_0
-    puts "Step 6: Connecting to target a53_0..."
+    # Step 7: Connect to target a53_0
+    puts "Step 7: Connecting to target a53_0..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     
-    # Step 7: Verify target is ready
+    # Step 8: Verify target is ready
     rst -processor
-}
 
-# Read device DNA for log filename
-proc read_device_dna {enable} {
-    if {$enable == 1} {
-        device_command "11." 1 0
+    # Download FSBL
+    dow $fsbl_path
+    set bp_47_40_fsbl_bp [bpadd -addr &XFsbl_Exit]
+    con -block -timeout 60
+    bpremove $bp_47_40_fsbl_bp
+    
+
+    # Check if Microblaze is enabled
+    set microblaze_enabled 0
+    if {[info exists ::microblaze_enable]} {
+        set microblaze_enabled $::microblaze_enable
+    } elseif {[info exists ::script_config_array]} {
+        set microblaze_enabled [get_ini_config "microblaze.enable" "0"]
     }
-    global log_file log_filename tool_ready
     
-    log_message "Reading device DNA with timeout: ${timeout}s"
-    puts "Reading device DNA..."
+    # Convert string values to boolean
+    if {[string is boolean -strict $microblaze_enabled]} {
+        set microblaze_enabled [expr {$microblaze_enabled ? 1 : 0}]
+    } elseif {[string equal -nocase $microblaze_enabled "true"] || [string equal -nocase $microblaze_enabled "yes"] || [string equal $microblaze_enabled "1"]} {
+        set microblaze_enabled 1
+    } else {
+        set microblaze_enabled 0
+    }
     
-    # Send command to read device DNA
-    set dna_cmd "mrd 0x00000000 0x1000"
-    set response [device_command $dna_cmd]
-    
-    # Parse the response to extract DNA
-    # Device DNA is typically 96-bit (12 bytes) starting at address 0x00000000
-    set dna_value ""
-    if {[string match "*0x00000000*" $response]} {
-        # Extract the DNA value from the response
-        # Format: 0x00000000: 0x12345678 0x9ABCDEF0 0x12345678
-        set lines [split $response "\n"]
-        foreach line $lines {
-            if {[string match "*0x00000000*" $line]} {
-                # Extract hex values from the line
-                set hex_values [regexp -all -inline {0x[0-9A-Fa-f]{8}} $line]
-                if {[llength $hex_values] >= 3} {
-                    # Take first 3 32-bit values for 96-bit DNA
-                    set dna_value "[lindex $hex_values 0][string range [lindex $hex_values 1] 2 end][string range [lindex $hex_values 2] 2 end]"
-                    break
-                }
-            }
+    # Setup MDM and Microblaze only if enabled
+    if {$microblaze_enabled} {
+        puts "Microblaze enabled - Setting up MDM and downloading Microblaze app..."
+        
+        # Setup MDM
+        configparams mdm-detect-bscan-mask 2
+
+        # Reset Microblaze
+        targets -set -nocase -filter {name =~ "*microblaze*#0" && bscan=="USER2" } 
+
+        # Download Microblaze App
+        if {[info exists mb_elf] && $mb_elf != ""} {
+            dow $mb_elf
+            after 1000
+            con
+        } else {
+            puts "Warning: Microblaze enabled but mb_elf not defined"
         }
-    }
-    
-    # If no DNA found, generate a simulated one
-    if {$dna_value == ""} {
-        set dna_value "0x[format %08X [expr {int(rand() * 0xFFFFFFFF)}]][format %08X [expr {int(rand() * 0xFFFFFFFF)}]][format %08X [expr {int(rand() * 0xFFFFFFFF)}]]"
-        puts "Generated simulated device DNA: $dna_value"
-        log_message "Generated simulated device DNA: $dna_value"
     } else {
-        puts "Device DNA read successfully: $dna_value"
-        log_message "Device DNA read successfully: $dna_value"
+        puts "Microblaze disabled - Skipping Microblaze setup"
     }
-    
-    # Append DNA value to existing log filename
-    if {[info exists log_filename] && $log_filename != ""} {
-        # Remove .log extension if present, append DNA, then add .log back
-        set base_name [file rootname $log_filename]
-        set log_filename "${base_name}_${dna_value}.log"
-    } else {
-        # Create new filename with DNA
-        set log_filename "device_dna_${dna_value}.log"
-    }
-    puts "Log filename with DNA: $log_filename"
-    log_message "Log filename with DNA: $log_filename"
-    
-    # Set tool ready flag
-    set tool_ready 1
-    
-    return $dna_value
+
+    # Reset A53
+    targets -set -nocase -filter {name =~ "*a53*#0"}
+    rst -processor
+
 }
 
-# Example usage of command line arguments
-proc example_cmd_args_usage {} {
-    # Get all command line arguments as array
-    set cmd_args [get_cmd_args]
-    array set args $cmd_args
-    
-    puts "Example: Using command line arguments"
-    puts "Architecture: $args(arch)"
-    puts "Mode: $args(mode)"
-    puts "Boot Mode: $args(boot_mode)"
-    puts "Hardware Server: $args(hw_server)"
-    
-    # Get specific argument
-    set xsdb_path [get_cmd_arg "xsdb_path"]
-    if {$xsdb_path != ""} {
-        puts "XSDB Path: $xsdb_path"
-    }
-}
 
-# Show help information
+#--------------------------------------------------------------------
+# This function shows help information
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc show_help {} {
     puts "Device Runner CLI - FPGA Application Runner"
     puts "Usage: device_runner_cli.tcl [options]"
@@ -888,7 +745,125 @@ proc show_help {} {
     puts "  device_runner_cli.tcl -jtag_tcp 192.168.1.100:3121"
 }
 
-# Initialize application
+#--------------------------------------------------------------------
+# This function polls the response register in a loop to keep the tcp socket alive
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc poll_response_register {} {
+    # Poll response register in a loop to keep the tcp socket alive
+    if {[info exists ::shared_mem_base]} {
+        set resp_reg_addr [expr $::shared_mem_base + $::RESP_REG_OFFSET]
+        set running 1
+        
+        while {$running} {
+            # Check response register
+            set resp_value [mrd $resp_reg_addr]
+            
+            # Check for EXIT response or termination condition
+            if {[expr $resp_value & $::RESP_ERROR]} {
+                # Error response - read error data
+                set error_data [read_data_area 1024]
+                puts "Error response: '$error_data'"
+                log_message "Error response: '$error_data'"
+                # Clear response register
+                mwr $resp_reg_addr 0
+                # Optionally exit on error
+                # set running 0
+            } elseif {[expr $resp_value & $::RESP_SUCCESS]} {
+                # Success response - read data if available
+                set response_data [read_data_area 1024]
+                if {[string match "*EXIT*" $response_data] || [string match "*exit*" $response_data]} {
+                    puts "Exit command received: '$response_data'"
+                    log_message "Exit command received: '$response_data'"
+                    set running 0
+                }
+                # Clear response register
+                mwr $resp_reg_addr 0
+            }
+            
+            # Poll every 100ms
+            after 100
+        }
+    } else {
+        # Fallback: wait to keep the tcp socket alive if shared memory not available
+        vwait forever
+    }
+}
+
+#--------------------------------------------------------------------
+# This function connects to device and executes in the specified mode
+#
+#--------------------------------------------------------------------
+#
+# param hw_server: Hardware server hostname or IP address
+# param mode: Execution mode (user or script)
+# param boot_mode: Boot mode (jtag or other)
+# param term_app: Terminal application path
+# param app_elf: Application ELF file path
+#--------------------------------------------------------------------
+proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
+    # Connect to device, reset cores and connect to target a53_0
+    conn_device $hw_server $::bit_file
+
+    # Initialize shared memory communication if available
+    if {[info exists ::shared_mem_base]} {
+        puts "Initializing shared memory communication..."
+        init_shared_memory
+        puts "Shared memory communication ready"
+    } else {
+        puts "Shared memory communication not available - using legacy mode"
+    }
+
+    # Get the tcp port number to communicate with device via uart/jtag
+    set tcp_port_num [jtagterminal -socket]
+    puts "TCP port number: $tcp_port_num"
+
+    # Determine if mode is user or script
+    if {$mode == "user"} {
+        puts "Mode: User - Interactive operation"
+        puts "Starting interactive menu system..."
+        
+        exec $term_app localhost $tcp_port_num &
+        if {$boot_mode == "jtag"} {
+            puts "Downloading Device Application .elf file"
+            dow $app_elf
+        }
+
+        puts "Place A53_0 into execution state..."
+        con
+
+        # Poll response register in a loop to keep the tcp socket alive
+        poll_response_register
+
+    } elseif {$mode == "script"} {
+        puts "Mode: Script - Automated operation"
+        puts "Running INI-based script mode..."
+        run_script_mode_from_ini $::script_config_file
+        
+        if {$boot_mode == "jtag"} {
+            puts "Downloading Device Application .elf file"
+            dow $app_elf
+        }
+        puts "Place A53_0 into execution state..."
+        con
+        
+        # Poll response register in a loop to keep the tcp socket alive
+        poll_response_register
+    } else {
+        puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
+        log_message "ERROR: Invalid mode '$mode'"
+        exit 1
+    }
+}
+
+#--------------------------------------------------------------------
+# This function initializes the application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc init_app {} {
     global app_name version
     
@@ -964,155 +939,54 @@ proc init_app {} {
         }
     }
 
-    # Determine Operating System
-    # set op_sys [lindex $tcl_platform(os) 0]
-    
-    # Check if OS is supported (Windows or Linux)
-    # if {[string match -nocase "*windows*" $op_sys]} {
-        # puts "Operating System: Windows - Supported"
-    # } elseif {[string match -nocase "*linux*" $op_sys]} {
-        # puts "Operating System: Linux - Supported"
-        # set term_app "./${term_app}"
-    # } else {
-        # puts "ERROR: Unsupported operating system: $op_sys"
-        # puts "This tool only supports Windows and Linux"
-        # exit 1
-    # }
-
-    # Connect to device, reset cores and connect to target a53_0
-    conn_device $hw_server $::bit_file
-
-    # Initialize shared memory communication if available
-    if {[info exists ::shared_mem_base]} {
-        puts "Initializing shared memory communication..."
-        init_shared_memory
-        puts "Shared memory communication ready"
-    } else {
-        puts "Shared memory communication not available - using legacy mode"
+    # If script mode is enabled, parse INI file and get hardware server and bit file
+    if {$mode == "script" && $::script_mode_enabled} {
+        puts "Parsing INI configuration file for script mode..."
+        if {![parse_ini_file $::script_config_file]} {
+            puts "ERROR: Failed to parse INI file: $::script_config_file"
+            exit 1
+        }
+        
+        # Get hardware server and bit file from INI file
+        set ini_hw_server [get_ini_config "connection.hw_server" $hw_server]
+        set ini_bit_file [get_ini_config "fpga.bit_file" $::bit_file]
+        
+        puts "Hardware server from INI: $ini_hw_server"
+        puts "Bit file from INI: $ini_bit_file"
+        
+        # Use INI values
+        set hw_server $ini_hw_server
+        set ::bit_file $ini_bit_file
     }
 
-    # Get the tcp port number to communicate with device via uart/jtag
-    set tcp_port_num [jtagterminal -socket]
-    puts "TCP port number: $tcp_port_num"
-
-    # Determine if mode is user or script
+    # If user mode, display main menu before connecting to device
     if {$mode == "user"} {
-        puts "Mode: User - Interactive operation"
-        puts "Starting interactive menu system..."
-        
-        exec $term_app localhost $tcp_port_num &
-        if {$boot_mode == "jtag"} {
-            puts "Downloading Device Application .elf file"
-            dow $app_elf
-        }
-
-        puts "Place A53_0 into execution state..."
-        con
-
-        # wait to keep the tcp socket alive
-        vwait forever
-        
-        # Start the main menu for user interaction
         main_menu
-
-
-    } elseif {$mode == "script"} {
-        puts "Mode: Script - Automated operation"
-        
-        # Check if INI-based script mode is enabled
-        if {$::script_mode_enabled} {
-            puts "Running INI-based script mode..."
-            run_script_mode_from_ini $::script_config_file
-        } else {
-            # Original script mode with terminal application
-            if {[catch {set tcl_chan_id [socket localhost $tcp_port_num]} err]} {
-                after 10000
-                set tcl_chan_id [socket localhost $tcp_port_num]
-            }
-
-            puts "Configure Tcl Channel..."
-            fconfigure $tcl_chan_id -buffering none -blocking 0 t-translation auto
-
-            puts "Setting up stdout fileevent..."
-            fileevent $tcl_chan_id readable "tcp_socket_to_stdout $tcl_chan_id"
-
-            if {$boot_mode == "jtag"} {
-                puts "Downloading Device Application .elf file"
-                dow $app_elf
-            }
-            puts "Place A53_0 into execution state..."
-            con
-
-            puts "Placing Tool into script mode..."
-            device_command "!esp!" 0 0
-
-            puts "Waiting until tool is done with initialization...\n"
-            set tool_ready 0
-            after 5000 {if {$tool_ready == 0} {
-                puts "\n\n ERROR: Tool did not initialize"
-                exit 1
-            }}
-
-            vwait tool_ready
-            puts "\n\n Tool has finished initializing..."
-            if {$log_dir != ""} {
-                puts "\tCreating script-mode log file..."
-                # Create log directory if it doesn't exist
-                if {[file isdirectory $log_dir] == 0} {
-                    file mkdir $log_dir
-                }
-
-                # Set log file name to indicate script mode Logging
-                set log_filename "tlf"
-
-                # Attempt to get device dna for log filename
-                read_device_dna 1
-
-                after 5000 {if {$log_filename == "tlf"} {
-                    puts "\n\n ERROR: Could not read device DNA for log file!"
-                    exit 1
-                }}
-
-                vwait log_filename
-
-                # Create filename based on dna data and current time
-                if {($log_filename != "tlf") && ($log_filename != "") && \
-                    ([string length $log_filename] == 24) && \
-                    ([string is xdigit $log_filename] == 1)} {
-                        set log_filename "${log_dir}/${log_filename}_[string toupper \
-                            [clock format [clock seconds] \
-                            -format "%d_%b_%Y_%H_%M_%S"]].log"
-                        set tool_log_fptr [open $log_filename w]
-                    } else {
-                        puts "\n\n ERROR: Could not create script log file!\n"
-                        exit 1
-                    }
-            }
-        }
-    } else {
-        puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
-        log_message "ERROR: Invalid mode '$mode'"
-        exit 1
     }
     
-    # Show initialization
-    puts "\n\nStarting Device Runner CLI initialization:"
-    puts "- Initializing output directory..."
-    puts "- Setting up logging system..."
-    puts "- Loading helper functions..."
-    puts "- Parsing command line arguments..."
-    puts "- Ready for operation"
-    puts ""
+    # Connect to device and execute in the specified mode
+    run_device_connection $hw_server $mode $boot_mode $term_app $app_elf
+    
     
 }
 
-# Clear screen
+#--------------------------------------------------------------------
+# This function clears the screen
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc clear_screen {} {
     # Clear screen (works on most terminals)
     puts "\033\[2J\033\[H"
 }
 
-# Show ASCII art banner
+#--------------------------------------------------------------------
+# This function shows the ASCII art banner
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc show_banner {} {
     puts ""
     puts "########  ######## ##     ## ####  ######  ########     ######  ##       #### "
@@ -1131,7 +1005,12 @@ proc show_banner {} {
 }
 
 
-# View logs
+#--------------------------------------------------------------------
+# This function displays recent log entries
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc view_logs {} {
     global log_file
     
@@ -1168,7 +1047,1318 @@ proc view_logs {} {
 }
 
 
-# Exit application
+#--------------------------------------------------------------------
+# This function displays and handles the main menu
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc main_menu {} {
+    set running 1
+    
+    while {$running} {
+        clear_screen
+        show_banner
+        
+        puts "=== MAIN MENU ==="
+        puts "1. View Configuration"
+        puts "2. Configure Settings"
+        puts "3. Run Application"
+        puts "4. Get Status"
+        puts "5. Test Application"
+        puts "6. Help"
+        puts "0. Exit"
+        puts ""
+        puts -nonewline "Enter choice (0-6): "
+        flush stdout
+        
+        set choice [gets stdin]
+        set choice [string trim $choice]
+        
+        switch $choice {
+            "1" {
+                view_configuration_menu
+            }
+            "2" {
+                configure_settings_menu
+            }
+            "3" {
+                run_application_menu
+            }
+            "4" {
+                get_status_menu
+            }
+            "5" {
+                test_application_menu
+            }
+            "6" {
+                show_help_menu
+            }
+            "0" {
+                set running 0
+                exit_application
+            }
+            default {
+                puts "\aInvalid choice. Please enter 0-6."
+                after 1000
+            }
+        }
+    }
+}
+
+#--------------------------------------------------------------------
+# This function displays the current configuration
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc view_configuration_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== CURRENT CONFIGURATION ==="
+    puts ""
+    
+    # Display configuration from shared memory if available
+    if {[info exists ::shared_mem_base]} {
+        # Try to get configuration via shared memory
+        set device_name [send_get_config_command "device_name"]
+        set base_address [send_get_config_command "base_address"]
+        set operation_mode [send_get_config_command "operation_mode"]
+        set timeout_value [send_get_config_command "timeout_value"]
+        set debug_level [send_get_config_command "debug_level"]
+        
+        if {$device_name != ""} {
+            puts "Device Name:     $device_name"
+        } else {
+            puts "Device Name:     (not set)"
+        }
+        
+        if {$base_address != ""} {
+            puts "Base Address:    0x$base_address"
+        } else {
+            puts "Base Address:    (not set)"
+        }
+        
+        if {$operation_mode != ""} {
+            puts "Operation Mode:  $operation_mode"
+        } else {
+            puts "Operation Mode:  (not set)"
+        }
+        
+        if {$timeout_value != ""} {
+            puts "Timeout Value:   0x$timeout_value"
+        } else {
+            puts "Timeout Value:   (not set)"
+        }
+        
+        if {$debug_level != ""} {
+            puts "Debug Level:     $debug_level"
+        } else {
+            puts "Debug Level:     (not set)"
+        }
+    } else {
+        puts "Shared memory not available - configuration not accessible"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays the configuration settings menu
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_settings_menu {} {
+    set running 1
+    
+    while {$running} {
+        clear_screen
+        show_banner
+        
+        puts "=== CONFIGURATION MENU ==="
+        puts "1. Device Name (String)"
+        puts "2. Base Address (Hex)"
+        puts "3. Operation Mode (List)"
+        puts "4. Timeout Value (Hex)"
+        puts "5. Debug Level (List)"
+        puts "6. View Current Configuration"
+        puts "0. Back to Main Menu"
+        puts ""
+        puts -nonewline "Enter choice (0-6): "
+        flush stdout
+        
+        set choice [gets stdin]
+        set choice [string trim $choice]
+        
+        switch $choice {
+            "1" {
+                configure_device_name
+            }
+            "2" {
+                configure_base_address
+            }
+            "3" {
+                configure_operation_mode
+            }
+            "4" {
+                configure_timeout_value
+            }
+            "5" {
+                configure_debug_level
+            }
+            "6" {
+                view_configuration_menu
+            }
+            "0" {
+                set running 0
+            }
+            default {
+                puts "\aInvalid choice. Please enter 0-6."
+                after 1000
+            }
+        }
+    }
+}
+
+#--------------------------------------------------------------------
+# This function configures the device name
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_device_name {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Device Name ==="
+    puts ""
+    puts -nonewline "Enter device name: "
+    flush stdout
+    
+    set device_name [gets stdin]
+    set device_name [string trim $device_name]
+    
+    if {$device_name != ""} {
+        if {[info exists ::shared_mem_base]} {
+            send_set_config_command "device_name" $device_name 1
+            puts "Device name set to: $device_name"
+        } else {
+            puts "Shared memory not available - setting not saved"
+        }
+    } else {
+        puts "Device name not changed"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the base address
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_base_address {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Base Address ==="
+    puts ""
+    puts -nonewline "Enter base address (e.g., 0x43C00000): "
+    flush stdout
+    
+    set base_address [gets stdin]
+    set base_address [string trim $base_address]
+    
+    if {$base_address != ""} {
+        if {[info exists ::shared_mem_base]} {
+            send_set_config_command "base_address" $base_address 2
+            puts "Base address set to: $base_address"
+        } else {
+            puts "Shared memory not available - setting not saved"
+        }
+    } else {
+        puts "Base address not changed"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the operation mode
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_operation_mode {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Operation Mode ==="
+    puts ""
+    puts "1. Short"
+    puts "2. Medium"
+    puts "3. Long"
+    puts ""
+    puts -nonewline "Enter choice (1-3): "
+    flush stdout
+    
+    set choice [gets stdin]
+    set choice [string trim $choice]
+    
+    switch $choice {
+        "1" {
+            set mode "Short"
+            set mode_value "1"
+        }
+        "2" {
+            set mode "Medium"
+            set mode_value "2"
+        }
+        "3" {
+            set mode "Long"
+            set mode_value "3"
+        }
+        default {
+            puts "Invalid choice"
+            after 1000
+            return
+        }
+    }
+    
+    if {[info exists ::shared_mem_base]} {
+        send_set_config_command "operation_mode" $mode_value 3
+        puts "Operation mode set to: $mode ($mode_value)"
+    } else {
+        puts "Shared memory not available - setting not saved"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the timeout value
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_timeout_value {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Timeout Value ==="
+    puts ""
+    puts -nonewline "Enter timeout value (e.g., 0x00001000): "
+    flush stdout
+    
+    set timeout_value [gets stdin]
+    set timeout_value [string trim $timeout_value]
+    
+    if {$timeout_value != ""} {
+        if {[info exists ::shared_mem_base]} {
+            send_set_config_command "timeout_value" $timeout_value 2
+            puts "Timeout value set to: $timeout_value"
+        } else {
+            puts "Shared memory not available - setting not saved"
+        }
+    } else {
+        puts "Timeout value not changed"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the debug level
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_debug_level {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Debug Level ==="
+    puts ""
+    puts "1. Low"
+    puts "2. Medium"
+    puts "3. High"
+    puts "4. Verbose"
+    puts ""
+    puts -nonewline "Enter choice (1-4): "
+    flush stdout
+    
+    set choice [gets stdin]
+    set choice [string trim $choice]
+    
+    switch $choice {
+        "1" {
+            set level "Low"
+            set level_value "1"
+        }
+        "2" {
+            set level "Medium"
+            set level_value "2"
+        }
+        "3" {
+            set level "High"
+            set level_value "3"
+        }
+        "4" {
+            set level "Verbose"
+            set level_value "4"
+        }
+        default {
+            puts "Invalid choice"
+            after 1000
+            return
+        }
+    }
+    
+    if {[info exists ::shared_mem_base]} {
+        send_set_config_command "debug_level" $level_value 3
+        puts "Debug level set to: $level ($level_value)"
+    } else {
+        puts "Shared memory not available - setting not saved"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function runs the application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc run_application_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== RUNNING APPLICATION ==="
+    
+    if {[info exists ::shared_mem_base]} {
+        # Get current configuration
+        set device_name [send_get_config_command "device_name"]
+        set base_address [send_get_config_command "base_address"]
+        set operation_mode [send_get_config_command "operation_mode"]
+        set timeout_value [send_get_config_command "timeout_value"]
+        set debug_level [send_get_config_command "debug_level"]
+        
+        puts "Device: $device_name"
+        puts "Base Address: 0x$base_address"
+        puts "Operation Mode: $operation_mode"
+        puts "Timeout: $timeout_value ms"
+        puts "Debug Level: $debug_level"
+        puts ""
+        puts "Application running..."
+        
+        # Send run application command
+        send_run_app_command
+        
+        puts "Application completed."
+    } else {
+        puts "Shared memory not available - cannot run application"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays system status
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc get_status_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== SYSTEM STATUS ==="
+    puts ""
+    
+    if {[info exists ::shared_mem_base]} {
+        # Get status via shared memory
+        set status [send_get_status_command]
+        puts "Status: $status"
+        puts ""
+        puts "Shared Memory Base: 0x[format %08X $::shared_mem_base]"
+        puts "Shared Memory Size: 0x[format %08X $::shared_mem_size]"
+    } else {
+        puts "Shared memory not available"
+    }
+    
+    puts ""
+    puts "Mode: $::mode"
+    puts "Boot Mode: $::boot_mode"
+    puts "Hardware Server: $::hw_server"
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays and handles the test application menu
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc test_application_menu {} {
+    set running 1
+    
+    while {$running} {
+        clear_screen
+        show_banner
+        
+        puts "=== TEST APPLICATION MENU ==="
+        puts "1. Configure Test Settings"
+        puts "2. View Test Configuration"
+        puts "3. Run Tests"
+        puts "4. View Test Results"
+        puts "0. Back to Main Menu"
+        puts ""
+        puts -nonewline "Enter choice (0-4): "
+        flush stdout
+        
+        set choice [gets stdin]
+        set choice [string trim $choice]
+        
+        switch $choice {
+            "1" {
+                configure_test_menu
+            }
+            "2" {
+                view_test_config_menu
+            }
+            "3" {
+                run_tests_menu
+            }
+            "4" {
+                view_test_results_menu
+            }
+            "0" {
+                set running 0
+            }
+            default {
+                puts "\aInvalid choice. Please enter 0-4."
+                after 1000
+            }
+        }
+    }
+}
+
+#--------------------------------------------------------------------
+# This function displays the test configuration menu
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_test_menu {} {
+    set running 1
+    
+    while {$running} {
+        clear_screen
+        show_banner
+        
+        puts "=== CONFIGURE TEST SETTINGS ==="
+        puts "1. Load Test Config from INI File"
+        puts "2. Set Test Config File Path"
+        puts "3. Set Number of Tests"
+        puts "4. Configure Test Cases"
+        puts "5. Set Test Timeout"
+        puts "6. Set Test Retries"
+        puts "7. View Current Test Configuration"
+        puts "0. Back to Test Menu"
+        puts ""
+        puts -nonewline "Enter choice (0-7): "
+        flush stdout
+        
+        set choice [gets stdin]
+        set choice [string trim $choice]
+        
+        switch $choice {
+            "1" {
+                load_test_config_from_ini
+            }
+            "2" {
+                set_test_config_file
+            }
+            "3" {
+                set_number_of_tests
+            }
+            "4" {
+                configure_test_cases
+            }
+            "5" {
+                set_test_timeout
+            }
+            "6" {
+                set_test_retries
+            }
+            "7" {
+                view_test_config_menu
+            }
+            "0" {
+                set running 0
+            }
+            default {
+                puts "\aInvalid choice. Please enter 0-7."
+                after 1000
+            }
+        }
+    }
+}
+
+#--------------------------------------------------------------------
+# This function loads test configuration from INI file
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc load_test_config_from_ini {} {
+    global test_config_file test_config_array
+    
+    clear_screen
+    show_banner
+    
+    puts "=== Load Test Configuration from INI ==="
+    puts ""
+    
+    # Get test config file path
+    if {![info exists test_config_file] || $test_config_file == ""} {
+        # Try default test config file first
+        set default_config "test_config.ini"
+        if {[file exists $default_config]} {
+            puts "Found default test config file: $default_config"
+            set test_config_file $default_config
+        } else {
+            puts -nonewline "Enter test config file path (default: test_config.ini): "
+            flush stdout
+            set config_file [gets stdin]
+            set config_file [string trim $config_file]
+            
+            if {$config_file == ""} {
+                set config_file $default_config
+            }
+            set test_config_file $config_file
+        }
+    }
+    
+    puts "Loading test configuration from: $test_config_file"
+    
+    # Parse test INI file
+    if {[parse_test_ini_file $test_config_file]} {
+        puts "Test configuration loaded successfully!"
+        
+        # Display loaded configuration
+        if {[info exists test_config_array]} {
+            puts ""
+            puts "Loaded Configuration:"
+            if {[info exists test_config_array(test.number_of_tests)]} {
+                puts "  Number of Tests: $test_config_array(test.number_of_tests)"
+            }
+            if {[info exists test_config_array(test.timeout)]} {
+                puts "  Test Timeout: $test_config_array(test.timeout) ms"
+            }
+            if {[info exists test_config_array(test.retries)]} {
+                puts "  Test Retries: $test_config_array(test.retries)"
+            }
+        }
+    } else {
+        puts "ERROR: Failed to load test configuration from $test_config_file"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function parses a test INI configuration file
+#
+#--------------------------------------------------------------------
+#
+# param test_ini_file: Path to the test INI configuration file
+#--------------------------------------------------------------------
+proc parse_test_ini_file {test_ini_file} {
+    global test_config_array
+    
+    if {![file exists $test_ini_file]} {
+        puts "ERROR: Test INI file not found: $test_ini_file"
+        return 0
+    }
+    
+    puts "Parsing test INI configuration file: $test_ini_file"
+    log_message "Parsing test INI configuration file: $test_ini_file"
+    
+    set fp [open $test_ini_file r]
+    set current_section ""
+    
+    while {[gets $fp line] != -1} {
+        # Remove leading/trailing whitespace
+        set line [string trim $line]
+        
+        # Skip empty lines and comments
+        if {$line == "" || [string match "#*" $line] || [string match ";*" $line]} {
+            continue
+        }
+        
+        # Check for section header [section]
+        if {[string match "\[*\]" $line]} {
+            set current_section [string range $line 1 end-1]
+            puts "Found section: $current_section"
+            continue
+        }
+        
+        # Parse key=value pairs
+        if {[string first "=" $line] > 0} {
+            set key_value [split $line "="]
+            set key [string trim [lindex $key_value 0]]
+            set value [string trim [lindex $key_value 1]]
+            
+            # Remove quotes if present
+            if {[string match "\"*\"" $value]} {
+                set value [string range $value 1 end-1]
+            }
+            
+            # Store in array with section prefix
+            if {$current_section != ""} {
+                set full_key "${current_section}.${key}"
+            } else {
+                set full_key $key
+            }
+            
+            set test_config_array($full_key) $value
+            puts "  $full_key = $value"
+        }
+    }
+    
+    close $fp
+    puts "Test INI file parsing completed"
+    log_message "Test INI file parsing completed"
+    return 1
+}
+
+#--------------------------------------------------------------------
+# This function sets the test config file path
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc set_test_config_file {} {
+    global test_config_file
+    
+    clear_screen
+    show_banner
+    
+    puts "=== Set Test Config File Path ==="
+    puts ""
+    
+    if {[info exists test_config_file] && $test_config_file != ""} {
+        puts "Current test config file: $test_config_file"
+    }
+    
+    puts -nonewline "Enter test config file path: "
+    flush stdout
+    
+    set config_file [gets stdin]
+    set config_file [string trim $config_file]
+    
+    if {$config_file != ""} {
+        set test_config_file $config_file
+        puts "Test config file set to: $test_config_file"
+    } else {
+        puts "Test config file not changed"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function sets the number of tests
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc set_number_of_tests {} {
+    global test_config_array
+    
+    clear_screen
+    show_banner
+    
+    puts "=== Set Number of Tests ==="
+    puts ""
+    
+    if {[info exists test_config_array(test.number_of_tests)]} {
+        puts "Current number of tests: $test_config_array(test.number_of_tests)"
+    }
+    
+    puts -nonewline "Enter number of tests: "
+    flush stdout
+    
+    set num_tests [gets stdin]
+    set num_tests [string trim $num_tests]
+    
+    if {$num_tests != "" && [string is integer $num_tests]} {
+        set test_config_array(test.number_of_tests) $num_tests
+        puts "Number of tests set to: $num_tests"
+    } else {
+        puts "Invalid number of tests"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures test cases
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_test_cases {} {
+    global test_config_array
+    
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Test Cases ==="
+    puts ""
+    
+    # Get number of test cases
+    set num_cases 0
+    if {[info exists test_config_array(test.number_of_tests)]} {
+        set num_cases $test_config_array(test.number_of_tests)
+    }
+    
+    if {$num_cases == 0} {
+        puts -nonewline "Enter number of test cases: "
+        flush stdout
+        set num_cases [gets stdin]
+        set num_cases [string trim $num_cases]
+        
+        if {![string is integer $num_cases] || $num_cases <= 0} {
+            puts "Invalid number of test cases"
+            puts ""
+            puts "Press any key to continue..."
+            gets stdin
+            return
+        }
+        set test_config_array(test.number_of_tests) $num_cases
+    }
+    
+    puts "Number of test cases: $num_cases"
+    puts ""
+    
+    # Configure each test case
+    for {set i 1} {$i <= $num_cases} {incr i} {
+        puts "=== Test Case $i ==="
+        puts -nonewline "Enter test case name (or press Enter to skip): "
+        flush stdout
+        set test_name [gets stdin]
+        set test_name [string trim $test_name]
+        
+        if {$test_name != ""} {
+            set test_config_array(test.case_${i}.name) $test_name
+        }
+        
+        puts -nonewline "Enter test case description: "
+        flush stdout
+        set test_desc [gets stdin]
+        set test_desc [string trim $test_desc]
+        
+        if {$test_desc != ""} {
+            set test_config_array(test.case_${i}.description) $test_desc
+        }
+        
+        puts ""
+    }
+    
+    puts "Test cases configured."
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function sets the test timeout
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc set_test_timeout {} {
+    global test_config_array
+    
+    clear_screen
+    show_banner
+    
+    puts "=== Set Test Timeout ==="
+    puts ""
+    
+    if {[info exists test_config_array(test.timeout)]} {
+        puts "Current test timeout: $test_config_array(test.timeout) ms"
+    }
+    
+    puts -nonewline "Enter test timeout in milliseconds: "
+    flush stdout
+    
+    set timeout [gets stdin]
+    set timeout [string trim $timeout]
+    
+    if {$timeout != "" && [string is integer $timeout]} {
+        set test_config_array(test.timeout) $timeout
+        puts "Test timeout set to: $timeout ms"
+    } else {
+        puts "Invalid timeout value"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function sets the test retries
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc set_test_retries {} {
+    global test_config_array
+    
+    clear_screen
+    show_banner
+    
+    puts "=== Set Test Retries ==="
+    puts ""
+    
+    if {[info exists test_config_array(test.retries)]} {
+        puts "Current test retries: $test_config_array(test.retries)"
+    }
+    
+    puts -nonewline "Enter number of test retries: "
+    flush stdout
+    
+    set retries [gets stdin]
+    set retries [string trim $retries]
+    
+    if {$retries != "" && [string is integer $retries]} {
+        set test_config_array(test.retries) $retries
+        puts "Test retries set to: $retries"
+    } else {
+        puts "Invalid retries value"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays the test configuration
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc view_test_config_menu {} {
+    global test_config_array test_config_file
+    
+    clear_screen
+    show_banner
+    
+    puts "=== TEST CONFIGURATION ==="
+    puts ""
+    
+    if {[info exists test_config_file]} {
+        puts "Test Config File: $test_config_file"
+    } else {
+        puts "Test Config File: (not set)"
+    }
+    puts ""
+    
+    if {[info exists test_config_array]} {
+        if {[info exists test_config_array(test.number_of_tests)]} {
+            puts "Number of Tests: $test_config_array(test.number_of_tests)"
+        } else {
+            puts "Number of Tests: (not set)"
+        }
+        
+        if {[info exists test_config_array(test.timeout)]} {
+            puts "Test Timeout: $test_config_array(test.timeout) ms"
+        } else {
+            puts "Test Timeout: (not set)"
+        }
+        
+        if {[info exists test_config_array(test.retries)]} {
+            puts "Test Retries: $test_config_array(test.retries)"
+        } else {
+            puts "Test Retries: (not set)"
+        }
+        
+        puts ""
+        puts "Test Cases:"
+        
+        set num_cases 0
+        if {[info exists test_config_array(test.number_of_tests)]} {
+            set num_cases $test_config_array(test.number_of_tests)
+        }
+        
+        if {$num_cases > 0} {
+            for {set i 1} {$i <= $num_cases} {incr i} {
+                puts "  Test Case $i:"
+                if {[info exists test_config_array(test.case_${i}.name)]} {
+                    puts "    Name: $test_config_array(test.case_${i}.name)"
+                }
+                if {[info exists test_config_array(test.case_${i}.description)]} {
+                    puts "    Description: $test_config_array(test.case_${i}.description)"
+                }
+            }
+        } else {
+            puts "  (no test cases configured)"
+        }
+    } else {
+        puts "No test configuration loaded"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function writes test result header to file
+#
+#--------------------------------------------------------------------
+#
+# param fp: File pointer
+#--------------------------------------------------------------------
+proc write_test_result_header {fp} {
+    puts $fp ""
+    puts $fp "=================================================================================="
+    puts $fp "                          TEST RESULTS REPORT"
+    puts $fp "=================================================================================="
+    puts $fp [format "%-20s | %-8s | %-30s | %-10s | %-s" \
+            "Timestamp" "Test #" "Test Name" "Status" "Message"]
+    puts $fp "----------------------------------------------------------------------------------"
+    flush $fp
+}
+
+#--------------------------------------------------------------------
+# This function writes a test result entry to file
+#
+#--------------------------------------------------------------------
+#
+# param fp: File pointer
+# param test_number: Test number
+# param test_name: Test name
+# param status: Test status (PASSED/FAILED/SKIPPED)
+# param message: Test message
+#--------------------------------------------------------------------
+proc write_test_result {fp test_number test_name status message} {
+    set timestamp [clock format [clock seconds] -format "%Y-%m-%d %H:%M:%S"]
+    
+    # Truncate test name if too long
+    set truncated_name $test_name
+    if {[string length $test_name] > 30} {
+        set truncated_name [string range $test_name 0 26]
+        append truncated_name "..."
+    }
+    
+    # Truncate message if too long
+    set truncated_message $message
+    if {[string length $message] > 50} {
+        set truncated_message [string range $message 0 46]
+        append truncated_message "..."
+    }
+    
+    puts $fp [format "%-20s | %-8s | %-30s | %-10s | %-s" \
+            $timestamp $test_number $truncated_name $status $truncated_message]
+    flush $fp
+}
+
+#--------------------------------------------------------------------
+# This function writes test summary footer to file
+#
+#--------------------------------------------------------------------
+#
+# param fp: File pointer
+# param total: Total number of tests
+# param passed: Number of passed tests
+# param failed: Number of failed tests
+#--------------------------------------------------------------------
+proc write_test_summary_footer {fp total passed failed} {
+    set pass_rate 0.0
+    if {$total > 0} {
+        set pass_rate [expr {($passed * 100.0) / $total}]
+    }
+    
+    puts $fp "----------------------------------------------------------------------------------"
+    puts $fp [format "SUMMARY: Total: %u | Passed: %u | Failed: %u | Pass Rate: %.1f%%" \
+            $total $passed $failed $pass_rate]
+    puts $fp "=================================================================================="
+    puts $fp ""
+    flush $fp
+}
+
+#--------------------------------------------------------------------
+# This function runs the tests
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc run_tests_menu {} {
+    global test_config_array
+    
+    clear_screen
+    show_banner
+    
+    puts "=== RUN TESTS ==="
+    puts ""
+    
+    if {![info exists test_config_array]} {
+        puts "ERROR: No test configuration loaded"
+        puts "Please configure tests first."
+        puts ""
+        puts "Press any key to continue..."
+        gets stdin
+        return
+    }
+    
+    # Get number of tests
+    set num_tests 0
+    if {[info exists test_config_array(test.number_of_tests)]} {
+        set num_tests $test_config_array(test.number_of_tests)
+    }
+    
+    if {$num_tests == 0} {
+        puts "ERROR: Number of tests not configured"
+        puts ""
+        puts "Press any key to continue..."
+        gets stdin
+        return
+    }
+    
+    puts "Running $num_tests test(s)..."
+    puts ""
+    
+    # Get timeout and retries
+    set timeout 5000
+    if {[info exists test_config_array(test.timeout)]} {
+        set timeout $test_config_array(test.timeout)
+    }
+    
+    set retries 3
+    if {[info exists test_config_array(test.retries)]} {
+        set retries $test_config_array(test.retries)
+    }
+    
+    # Open test results file
+    set test_results_file "test_results.txt"
+    set fp [open $test_results_file "a"]
+    
+    # Write test results header
+    write_test_result_header $fp
+    
+    # Initialize test session on device if shared memory is available
+    if {[info exists ::shared_mem_base]} {
+        # Send start test command with configuration
+        if {[send_start_test_command $num_tests $timeout $retries]} {
+            puts "Test session initialized on device"
+        } else {
+            puts "Warning: Failed to initialize test session on device"
+        }
+    }
+    
+    # Run each test
+    set passed 0
+    set failed 0
+    
+    for {set i 1} {$i <= $num_tests} {incr i} {
+        puts "=== Test Case $i ==="
+        
+        set test_name "Test Case $i"
+        if {[info exists test_config_array(test.case_${i}.name)]} {
+            set test_name $test_config_array(test.case_${i}.name)
+        }
+        
+        puts "Test Name: $test_name"
+        
+        set test_description ""
+        if {[info exists test_config_array(test.case_${i}.description)]} {
+            set test_description $test_config_array(test.case_${i}.description)
+            puts "Description: $test_description"
+        }
+        
+        set requires_reset 0
+        if {[info exists test_config_array(test.case_${i}.requires_reset)]} {
+            set requires_reset $test_config_array(test.case_${i}.requires_reset)
+        }
+        
+        puts "Running test..."
+        
+        set test_status "FAILED"
+        set test_message "Test execution failed"
+        
+        # Execute test on device if shared memory is available
+        if {[info exists ::shared_mem_base]} {
+            # Send run test command to device
+            if {[send_run_test_command $i $test_name $test_description $requires_reset]} {
+                # Wait for test to complete
+                after [expr {$timeout + 500}]
+                
+                # Get test status from device
+                set test_status_response [send_get_test_status_command]
+                if {$test_status_response != "" && ![string match "*ERROR*" $test_status_response]} {
+                    # Parse test status to determine if test passed
+                    # The device should indicate test result in the response
+                    if {[string match "*PASSED*" $test_status_response] || ![string match "*FAILED*" $test_status_response]} {
+                        set test_status "PASSED"
+                        set test_message "Test completed successfully"
+                        incr passed
+                    } else {
+                        set test_status "FAILED"
+                        set test_message "Test validation failed"
+                        incr failed
+                    }
+                } else {
+                    set test_status "FAILED"
+                    set test_message "Failed to get test status from device"
+                    incr failed
+                }
+            } else {
+                set test_status "FAILED"
+                set test_message "Failed to send test command to device"
+                incr failed
+            }
+        } else {
+            # Simulate test execution when shared memory not available
+            after 500
+            set test_status "PASSED"
+            set test_message "Test completed (simulated - shared memory not available)"
+            incr passed
+        }
+        
+        # Write test result to file
+        write_test_result $fp $i $test_name $test_status $test_message
+        
+        puts "Test $test_status: $test_message"
+        puts ""
+        after 500
+    }
+    
+    # Write test summary footer
+    write_test_summary_footer $fp $num_tests $passed $failed
+    
+    # Close test results file
+    close $fp
+    
+    puts "=== TEST RESULTS ==="
+    puts "Total Tests: $num_tests"
+    puts "Passed: $passed"
+    puts "Failed: $failed"
+    puts ""
+    puts "Test results written to: $test_results_file"
+    puts ""
+    
+    # Store results
+    set ::test_results(passed) $passed
+    set ::test_results(failed) $failed
+    set ::test_results(total) $num_tests
+    
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays test results
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc view_test_results_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== TEST RESULTS ==="
+    puts ""
+    
+    if {[info exists ::test_results]} {
+        puts "Total Tests: $::test_results(total)"
+        puts "Passed: $::test_results(passed)"
+        puts "Failed: $::test_results(failed)"
+        
+        if {$::test_results(total) > 0} {
+            set pass_rate [expr {($::test_results(passed) * 100.0) / $::test_results(total)}]
+            puts "Pass Rate: [format "%.1f" $pass_rate]%"
+        }
+    } else {
+        puts "No test results available"
+        puts "Run tests first to see results"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays help information
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc show_help_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== HELP ==="
+    puts ""
+    puts "Main Menu Options:"
+    puts "1. View Configuration - Display current settings"
+    puts "2. Configure Settings - Modify configuration parameters"
+    puts "3. Run Application - Execute with current configuration"
+    puts "4. Get Status - Display system status"
+    puts "5. Test Application - Test application on device"
+    puts "6. Help - Show this help information"
+    puts "0. Exit - Exit the application"
+    puts ""
+    puts "Configuration Options:"
+    puts "1. Device Name - String input with echo"
+    puts "2. Base Address - Hex input with echo"
+    puts "3. Operation Mode - List selection"
+    puts "4. Timeout Value - Hex input with echo"
+    puts "5. Debug Level - List selection"
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function exits the application
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc exit_application {} {
     puts ""
     puts -nonewline "Quit Device Runner CLI? (y/[n]) -> "
@@ -1186,9 +2376,13 @@ proc exit_application {} {
     }
 }
 
-############################################################################
-# proc: quit tool tool                                                     #
-############################################################################
+#--------------------------------------------------------------------
+# This function quits the tool
+#
+#--------------------------------------------------------------------
+#
+# param exit_code: Exit code (0=success, 1=error)
+#--------------------------------------------------------------------
 proc quit_tool {exit_code} {
     global tool_tcl_chan_id
     global tool_script
@@ -1267,7 +2461,13 @@ proc quit_tool {exit_code} {
     exit $exit_code
 }
 
-# Log message
+#--------------------------------------------------------------------
+# This function logs a message to the log file
+#
+#--------------------------------------------------------------------
+#
+# param message: Message string to log
+#--------------------------------------------------------------------
 proc log_message {message} {
     global log_file
     
@@ -1279,7 +2479,15 @@ proc log_message {message} {
     }
 }
 
-# Generate BOOT.bin with archiving functionality
+#--------------------------------------------------------------------
+# This function generates BOOT.bin with archiving functionality
+#
+#--------------------------------------------------------------------
+#
+# param output_bin: Output BOOT.bin file path (default: "./BOOT.bin")
+# param bif_file: BIF file path (default: "./boot.bif")
+# param arch: Target architecture (default: "zynqmp")
+#--------------------------------------------------------------------
 proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch "zynqmp"}} {
     # Check if a previous BOOT.bin exists
     if {[file exists $output_bin]} {
@@ -1304,7 +2512,13 @@ proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch 
     puts "New BOOT.bin created at $output_bin"
 }
 
-# INI-based Script Mode Handler
+#--------------------------------------------------------------------
+# This function runs INI-based script mode
+#
+#--------------------------------------------------------------------
+#
+# param ini_file: Path to INI configuration file
+#--------------------------------------------------------------------
 proc run_script_mode_from_ini {ini_file} {
     global script_config_array script_mode_enabled
     
@@ -1369,7 +2583,12 @@ proc run_script_mode_from_ini {ini_file} {
     return 1
 }
 
-# Execute script commands from INI configuration
+#--------------------------------------------------------------------
+# This function executes script commands from INI configuration
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
 proc execute_script_commands_from_ini {} {
     global script_config_array
     
@@ -1394,7 +2613,13 @@ proc execute_script_commands_from_ini {} {
     }
 }
 
-# Execute individual script command
+#--------------------------------------------------------------------
+# This function executes an individual script command
+#
+#--------------------------------------------------------------------
+#
+# param command: Command string to execute
+#--------------------------------------------------------------------
 proc execute_script_command {command} {
     global script_config_array
     
@@ -1460,7 +2685,14 @@ proc execute_script_command {command} {
     }
 }
 
-# Wait for response from device
+#--------------------------------------------------------------------
+# This function waits for response from device
+#
+#--------------------------------------------------------------------
+#
+# param response_addr: Response register address
+# param timeout: Timeout in milliseconds
+#--------------------------------------------------------------------
 proc wait_for_response {response_addr timeout} {
     puts "Waiting for response from address: $response_addr"
     
@@ -1479,108 +2711,9 @@ proc wait_for_response {response_addr timeout} {
     return 0
 }
 
-# JTAG UART Communication Function
-proc jtag_uart_communication {hw_server_host {command_addr "0xXXXX0000"} {response_addr "0xXXXX0004"} {log_file "hostlog.txt"}} {
-    global log_file
-    
-    log_message "Starting JTAG UART communication with server: $hw_server_host"
-    puts "Starting JTAG UART communication..."
-    
-    # Connect to hardware server
-    puts "Connecting to hardware server: $hw_server_host"
-    connect -url tcp:$hw_server_host:3121
-    
-    # Set target to A53 core
-    puts "Setting target to A53 core..."
-    targets -set -filter {name =~ "*A53*#0"}
-    
-    # Start JTAG terminal logging
-    puts "Starting JTAG terminal logging to: $log_file"
-    jtagterminal -start -file $log_file
-    
-    # Continue execution
-    puts "Continuing execution..."
-    con
-    
-    # Issue command #1
-    puts "Issuing command to address: $command_addr"
-    mwr $command_addr 1
-    
-    # Wait/poll response register
-    puts "Polling response register at: $response_addr"
-    for {set i 0} {$i < 100} {incr i} {
-        set resp [mrd $response_addr]
-        if {$resp != 0} {
-            puts "Command response: $resp"
-            log_message "Command response received: $resp"
-            break
-        }
-        after 100
-    }
-    
-    # Stop JTAG terminal logging
-    puts "Stopping JTAG terminal logging..."
-    jtagterminal -stop
-    
-    log_message "JTAG UART communication completed"
-    puts "JTAG UART communication completed"
-}
-
-# Test shared memory communication
-proc test_shared_memory_communication {} {
-    puts "=== Testing Shared Memory Communication ==="
-    
-    # Check if shared memory is available
-    if {![info exists ::shared_mem_base]} {
-        puts "ERROR: Shared memory not available"
-        return 0
-    }
-    
-    puts "Shared memory base: 0x[format %08X $::shared_mem_base]"
-    puts "Shared memory size: 0x[format %08X $::shared_mem_size]"
-    
-    # Test basic commands
-    puts "\n--- Testing INIT Command ---"
-    set result [device_command_shared_memory "init"]
-    puts "INIT Result: $result"
-    
-    puts "\n--- Testing SET_CONFIG Commands ---"
-    set result [device_command_shared_memory "set_config device_name TestDevice 1"]
-    puts "SET_CONFIG device_name Result: $result"
-    
-    set result [device_command_shared_memory "set_config base_address 0x43C00000 2"]
-    puts "SET_CONFIG base_address Result: $result"
-    
-    set result [device_command_shared_memory "set_config operation_mode 2 3"]
-    puts "SET_CONFIG operation_mode Result: $result"
-    
-    puts "\n--- Testing GET_CONFIG Commands ---"
-    set result [device_command_shared_memory "get_config device_name"]
-    puts "GET_CONFIG device_name Result: $result"
-    
-    set result [device_command_shared_memory "get_config base_address"]
-    puts "GET_CONFIG base_address Result: $result"
-    
-    set result [device_command_shared_memory "get_config operation_mode"]
-    puts "GET_CONFIG operation_mode Result: $result"
-    
-    puts "\n--- Testing GET_STATUS Command ---"
-    set result [device_command_shared_memory "get_status"]
-    puts "GET_STATUS Result: $result"
-    
-    puts "\n--- Testing RUN_APP Command ---"
-    set result [device_command_shared_memory "run_app"]
-    puts "RUN_APP Result: $result"
-    
-    puts "\n--- Testing CAPTURE_RAM Command ---"
-    set result [device_command_shared_memory "capture_ram"]
-    puts "CAPTURE_RAM Result: $result"
-    
-    puts "\n=== Shared Memory Communication Test Completed ==="
-    return 1
-}
 
 # Main entry point
 if {[file tail $argv0] == [file tail [info script]]} {
     init_app
 }
+

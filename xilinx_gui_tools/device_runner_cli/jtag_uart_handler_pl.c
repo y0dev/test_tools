@@ -68,6 +68,7 @@ static void handle_get_status_command(void);
 static void handle_capture_ram_command(void);
 static void handle_exit_command(void);
 static void handle_help_command(void);
+static void handle_output_data_command(void);
 static void print_banner(void);
 static void delay_us(uint32_t delay);
 static void show_main_menu(void);
@@ -295,7 +296,50 @@ static void handle_help_command(void) {
     xil_printf("Handling HELP command\r\n");
     
     /* Send help information */
-    send_response("HELP: Available commands: init, run_app, set_param, get_status, capture_ram, exit, help");
+    send_response("HELP: Available commands: init, run_app, set_param, get_status, capture_ram, output_data, exit, help");
+}
+
+/*
+* Handle OUTPUT_DATA Command
+* @return: void
+*/
+static void handle_output_data_command(void) {
+    xil_printf("Handling OUTPUT_DATA command\r\n");
+    
+    /* Output application data */
+    xil_printf("=== Application Data Output (PL) ===\r\n");
+    xil_printf("Parameters Used:\r\n");
+    xil_printf("  Param1 (Height): 0x%08X\r\n", param1);
+    xil_printf("  Param2 (Base):   0x%08X\r\n", param2);
+    xil_printf("  Param3 (Size):   0x%08X\r\n", param3);
+    xil_printf("\r\n");
+    xil_printf("Application Status: %s\r\n", app_status);
+    xil_printf("\r\n");
+    xil_printf("Simulated PL Data Output:\r\n");
+    xil_printf("  Memory Region: 0x%08X - 0x%08X\r\n", param2, param2 + param3 - 1);
+    xil_printf("  Data Size: %d bytes\r\n", param3);
+    xil_printf("  Data Format: 32-bit words\r\n");
+    xil_printf("  PL Interface: AXI UART Lite\r\n");
+    xil_printf("\r\n");
+    
+    /* Simulate PL-specific data output */
+    xil_printf("PL Data Values:\r\n");
+    for (int i = 0; i < 8 && i < (param3 / 4); i++) {
+        uint32_t addr = param2 + (i * 4);
+        uint32_t value = 0x87654321 + (i * 0x22222222); /* Different pattern for PL */
+        xil_printf("  0x%08X: 0x%08X\r\n", addr, value);
+    }
+    if (param3 > 32) {
+        xil_printf("  ... (showing first 8 values)\r\n");
+    }
+    
+    xil_printf("\r\nPL Configuration:\r\n");
+    xil_printf("  UART Device: AXI UART Lite\r\n");
+    xil_printf("  Interrupt: Enabled\r\n");
+    xil_printf("  Baud Rate: 115200\r\n");
+    
+    /* Send response */
+    send_response(RESPONSE_OK);
 }
 
 /* Simple delay function */
@@ -337,9 +381,10 @@ static void show_main_menu(void) {
     xil_printf("3. Run Application\r\n");
     xil_printf("4. Get Status\r\n");
     xil_printf("5. Capture RAM\r\n");
-    xil_printf("6. Help\r\n");
-    xil_printf("7. Exit\r\n");
-    xil_printf("Enter choice (1-7): ");
+    xil_printf("6. Output Data\r\n");
+    xil_printf("7. Help\r\n");
+    xil_printf("8. Exit\r\n");
+    xil_printf("Enter choice (1-8): ");
 }
 
 /* Show Parameter Menu */
@@ -478,17 +523,22 @@ static void handle_menu_selection(char choice) {
             break;
             
         case '6':
+            xil_printf("\r\nOutputting PL data...\r\n");
+            handle_output_data_command();
+            break;
+            
+        case '7':
             xil_printf("\r\nShowing PL help...\r\n");
             handle_help_command();
             break;
             
-        case '7':
+        case '8':
             xil_printf("\r\nExiting PL handler...\r\n");
             handle_exit_command();
             break;
             
         default:
-            xil_printf("Invalid choice. Please enter 1-7.\r\n");
+            xil_printf("Invalid choice. Please enter 1-8.\r\n");
             break;
     }
 }
