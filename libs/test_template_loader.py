@@ -68,10 +68,59 @@ class TestTemplateLoader:
         # Apply template
         resolved_config.update(template)
         
+        # Extract user-defined uart_patterns
+        user_uart_patterns = test_config.get('uart_patterns', [])
+        
         # Apply test-specific overrides
         resolved_config.update(test_config)
-        
+
+        # Build merged uart_patterns
+        merged_patterns = []
+
+        # Merge uart_patterns from template and test_config
+        template_patterns = self.templates.get('uart_patterns', [])
+        template_by_names = {pattern['name'] for pattern in template_patterns if 'name' in pattern}
+
+        for idx, pattern in enumerate(template_patterns):
+            # Add mandatory patterns from test template
+            if pattern.get('mandatory', False):
+                merged_patterns.append(pattern.copy())
+
+            # After adding mandatory patterns, we will handle overrides
+            for u_pattern in list(user_uart_patterns):
+                u_name = u_pattern.get('name')
+
+                # Check if user pattern matches the current template pattern
+                if u_name and u_name == pattern.get('name'):
+                    # User is overriding this pattern
+                    tpl_pat = template_by_names[u_name]
+                    if not tpl_pat.get('allow_regex_override', True):
+                        tpl_pat['expected'] = u_pattern.get('expected', tpl_pat.get('expected'))
+                    else:
+                        merged_patterns[idx] = u_pattern.copy()
+                    user_uart_patterns.remove(u_pattern)
+                    continue
+                else:
+                    # Make sure it's a valid custom pattern
+                    regex = u_pattern.get('regex')
+                    if not regex:
+                        continue
+                    
+                    # This is a custom user pattern
+                    after = pattern.get('insert_after')
+                    if after and after == pattern.get('name'):
+                        merged_patterns.append(u_pattern)
+                        user_uart_patterns.remove(u_pattern)
+                    continue
+                
+
+               
+
+        if user_uart_patterns:
+            raise ValueError("User pattern missing valid 'insert_after' reference: {user_uart_patterns}")
+                
         # Ensure name is preserved
+        resolved_config['uart_patterns'] = merged_patterns
         resolved_config['name'] = template_name
         
         self.logger.debug(f"Resolved test '{template_name}': {resolved_config}")
