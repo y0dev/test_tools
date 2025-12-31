@@ -1,21 +1,36 @@
-/*
- * JTAG UART Handler for Device Runner CLI - Clean Implementation
+/**
+ * @file jtag_uart_handler.c
+ * @brief JTAG UART Handler for Device Runner CLI - Embedded Implementation
  * 
- * This file implements a clean embedded side of the Device Runner CLI communication.
+ * This file implements the embedded side of the Device Runner CLI communication.
  * It runs on the FPGA PS (Processing System) in baremetal mode and handles 
- * commands sent from the Device Runner CLI via JTAG UART.
+ * commands sent from the Device Runner CLI via JTAG UART or shared memory.
  * 
- * Features:
- * - Main menu with options
- * - Configuration submenu with string, hex, and list options
- * - Nice configuration display
- * - Banner display with page clearing
- * - Input echo for string and hex values
- * - Script/JTAG mode detection
+ * @section features Features
+ * - Interactive menu-driven interface with banner and screen clearing
+ * - Configuration management (device name, base address, operation mode, timeout, debug level)
+ * - Multiple input methods (string, hex, list selection)
+ * - Shared memory communication with TCL scripts
+ * - Startup mode detection (JTAG/UART, Interactive/Script)
+ * - Test framework support
+ * - Boot mode and Device DNA query
  * 
- * Author: Device Runner CLI
- * Version: 2.0.0
- * Date: 2024
+ * @section architecture Architecture
+ * 
+ * The application operates in two modes:
+ * - Interactive Mode: Menu-driven interface for user interaction
+ * - Script Mode: Background processing of shared memory messages
+ * 
+ * Communication methods:
+ * - UART: Direct user input/output via JTAG UART
+ * - Shared Memory: Command/response protocol at 0x10000000
+ * 
+ * @author Device Runner CLI
+ * @version 2.0.0
+ * @date 2024
+ * 
+ * @see types.h for data structure definitions
+ * @see constants.h for constant and message type definitions
  */
 
 #include <stdio.h>
@@ -26,121 +41,21 @@
 #include "xil_printf.h"
 #include "xil_io.h"
 
+/* Project header files */
+#include "include/types.h"
+#include "include/constants.h"
+#include "display.h"
+
 // UART I/O functions from BSP
 char inbyte(void);
 void outbyte(char c);
 
-/* Buffer and Command Definitions */
-#define BUFFER_SIZE 1024
-#define MAX_COMMAND_LEN 256
-#define MAX_RESPONSE_LEN 512
-#define MAX_STRING_LEN 64
-
-/* Command Register Definitions */
-#define CMD_REG_ADDR 0xXXXX0000
-#define RESP_REG_ADDR 0xXXXX0004
-
-/* Startup Mode Detection */
-#define STARTUP_MODE_REG_ADDR 0xXXXX0008
-#define MODE_JTAG_INTERACTIVE 0x00000001
-#define MODE_JTAG_SCRIPT     0x00000002
-#define MODE_UART_INTERACTIVE 0x00000003
-#define MODE_UART_SCRIPT     0x00000004
-
-/* Application Modes */
-#define MODE_INTERACTIVE 0
-#define MODE_BACKGROUND  1
-
-/* Shared Memory Definitions */
-#define SHARED_MEM_BASE 0x10000000
-#define SHARED_MEM_SIZE 0x1000
-
-/* Boot Mode Register Definition */
-#define BOOT_MODE_REG_ADDR 0xFF5E0200  /* CRL_APB BOOT_MODE register (read-only) */
-
-/* Device DNA Register Definitions (PS DNA - 96-bit value in 3 registers) */
-#define DNA_0_REG_ADDR 0xFFCC100C  /* PS DNA register 0 (bits 31:0) */
-#define DNA_1_REG_ADDR 0xFFCC1010  /* PS DNA register 1 (bits 63:32) */
-#define DNA_2_REG_ADDR 0xFFCC1014  /* PS DNA register 2 (bits 95:64) */
-
-/* Register offsets in shared memory */
-#define CMD_REG_OFFSET 0x0      /* Command register (bit field) */
-#define RESP_REG_OFFSET 0x4     /* Response register */
-#define DATA_AREA_OFFSET 0x8    /* Data area for command parameters */
-
-/* Message types */
-#define MSG_TYPE_INIT 1
-#define MSG_TYPE_RUN_APP 2
-#define MSG_TYPE_SET_PARAM 3
-#define MSG_TYPE_GET_STATUS 4
-#define MSG_TYPE_CAPTURE_RAM 5
-#define MSG_TYPE_SET_CONFIG 6
-#define MSG_TYPE_GET_CONFIG 7
-#define MSG_TYPE_EXIT 8
-#define MSG_TYPE_RESPONSE 9
-#define MSG_TYPE_ERROR 10
-#define MSG_TYPE_START_TEST 11
-#define MSG_TYPE_RUN_TEST 12
-#define MSG_TYPE_GET_TEST_STATUS 13
-#define MSG_TYPE_RESET_PROCESSOR 14
-#define MSG_TYPE_GET_BOOT_MODE 15
-#define MSG_TYPE_GET_DEVICE_DNA 16
-
-/* Status codes */
-#define MSG_STATUS_SUCCESS 0
-#define MSG_STATUS_ERROR 1
-#define MSG_STATUS_BUSY 2
-#define MSG_STATUS_TIMEOUT 3
-#define MSG_STATUS_INVALID 4
-
-/* Response register values */
-#define RESP_SUCCESS 0x00000001  /* Success response */
-#define RESP_ERROR 0x00000002    /* Error response */
-#define RESP_BUSY 0x00000004     /* Busy response */
-#define RESP_READY 0x00000008    /* Ready response */
-
-/* Configuration parameter types */
-#define CONFIG_TYPE_STRING 1
-#define CONFIG_TYPE_HEX 2
-#define CONFIG_TYPE_LIST 3
-
-/* Configuration Structure */
-typedef struct {
-    char device_name[MAX_STRING_LEN];
-    uint32_t base_address;
-    uint32_t operation_mode;  // 1=Short, 2=Medium, 3=Long
-    uint32_t timeout_value;
-    uint32_t debug_level;
-} config_t;
-
-/* Test Configuration Structure */
-typedef struct {
-    uint32_t number_of_tests;
-    uint32_t current_test;
-    uint32_t test_timeout;
-    uint32_t test_retries;
-    uint32_t tests_passed;
-    uint32_t tests_failed;
-    uint32_t test_in_progress;
-    uint32_t test_requires_reset;
-} test_config_t;
-
-/* Test Case Structure */
-typedef struct {
-    char name[64];
-    char description[128];
-    uint32_t requires_reset;
-    uint32_t status;  // 0=not run, 1=passed, 2=failed
-} test_case_t;
-
-#define MAX_TEST_CASES 32
-
 /* Global Variables */
 static volatile int running = 1;
-static volatile int app_mode = MODE_INTERACTIVE;
-static volatile int startup_mode = MODE_JTAG_INTERACTIVE;
-static volatile int script_mode = 0;
-static volatile int menu_active = 0;
+volatile int app_mode = MODE_INTERACTIVE;           /* Exported for display.c */
+volatile int startup_mode = MODE_JTAG_INTERACTIVE;  /* Exported for display.c */
+volatile int script_mode = 0;                       /* Exported for display.c */
+volatile int menu_active = 0;                       /* Exported for display.c */
 static volatile int test_mode = 0;
 
 /* Test Configuration */
@@ -158,7 +73,7 @@ static test_config_t test_config = {
 static test_case_t test_cases[MAX_TEST_CASES];
 
 /* Default Configuration */
-static config_t config = {
+config_t config = {  /* Exported for display.c */
     .device_name = "Default Device",
     .base_address = 0x43C00000,
     .operation_mode = 1,  // Short
@@ -166,191 +81,432 @@ static config_t config = {
     .debug_level = 1
 };
 
-/* Function Prototypes */
-static void clear_screen(void);
-static void print_banner(void);
-static void show_main_menu(void);
-static void show_config_menu(void);
-static void display_configuration(void);
-static char get_char_input(void);
+/* ============================================================================
+ * Function Prototypes - UI/Menu Functions
+ * 
+ * Note: Display and print functions are now in display.c
+ * ============================================================================ */
+
+/**
+ * @brief Get a single character input (no Enter required)
+ * 
+ * Reads a single character from UART input without requiring Enter key.
+ * 
+ * @return Character that was pressed
+ * @note Exported for use by display.c
+ */
+char get_char_input(void);
+
+/**
+ * @brief Get string input from user with echo
+ * 
+ * Reads a string from UART input with character echo, supports backspace.
+ * Input is terminated by Enter key.
+ * 
+ * @param[out] buffer Buffer to store the input string
+ * @param[in] max_len Maximum length of string (buffer size - 1)
+ * @param[in] prompt Prompt string to display before input
+ */
 static void get_string_input(char *buffer, int max_len, const char *prompt);
+
+/**
+ * @brief Get hexadecimal input from user with echo
+ * 
+ * Reads hexadecimal value from UART input. Supports 0x prefix and hex digits only.
+ * Input is terminated by Enter key.
+ * 
+ * @param[in] prompt Prompt string to display before input
+ * @return 32-bit unsigned integer value parsed from hex input
+ */
 static uint32_t get_hex_input(const char *prompt);
+
+/**
+ * @brief Get list selection from user (no Enter required)
+ * 
+ * Displays a numbered list of options and waits for user to press a number key.
+ * No Enter key required - selection is immediate.
+ * 
+ * @param[in] prompt Prompt string to display before options
+ * @param[in] options Array of option strings to display
+ * @param[in] num_options Number of options in the array
+ * @return Selected option number (1-based index)
+ */
 static uint32_t get_list_selection(const char *prompt, const char *options[], int num_options);
+
+/**
+ * @brief Handle main menu selection
+ * 
+ * Processes the user's main menu choice and executes the corresponding action.
+ * 
+ * @param[in] choice Character representing the menu choice ('0'-'5')
+ */
 static void handle_main_menu_selection(char choice);
+
+/**
+ * @brief Handle configuration menu selection
+ * 
+ * Processes the user's configuration menu choice and updates the corresponding setting.
+ * 
+ * @param[in] choice Character representing the menu choice ('0'-'6')
+ */
 static void handle_config_menu_selection(char choice);
+
+/**
+ * @brief Update device name configuration
+ * 
+ * Prompts user for new device name and updates the configuration structure.
+ */
 static void update_device_name(void);
+
+/**
+ * @brief Update base address configuration
+ * 
+ * Prompts user for new base address (hex) and updates the configuration structure.
+ */
 static void update_base_address(void);
+
+/**
+ * @brief Update operation mode configuration
+ * 
+ * Prompts user to select operation mode (Short/Medium/Long) and updates configuration.
+ */
 static void update_operation_mode(void);
+
+/**
+ * @brief Update timeout value configuration
+ * 
+ * Prompts user for new timeout value (hex) and updates the configuration structure.
+ */
 static void update_timeout_value(void);
+
+/**
+ * @brief Update debug level configuration
+ * 
+ * Prompts user to select debug level and updates the configuration structure.
+ */
 static void update_debug_level(void);
-static int detect_startup_mode(void);
-static void configure_startup_mode(void);
-static void print_startup_banner(void);
-static void run_interactive_mode(void);
-static void run_script_mode(void);
+
+/* ============================================================================
+ * Function Prototypes - Mode Detection and Configuration
+ * ============================================================================ */
+
+/**
+ * @brief Detect the startup mode from hardware registers
+ * 
+ * Reads the startup mode register to determine how the application was launched
+ * (JTAG interactive, JTAG script, UART interactive, or UART script).
+ * 
+ * @return Detected startup mode value (MODE_JTAG_INTERACTIVE, MODE_JTAG_SCRIPT, etc.)
+ * 
+ * @note Exported for use by main.c
+ */
+int detect_startup_mode(void);
+
+/**
+ * @brief Configure application based on detected startup mode
+ * 
+ * Sets application variables (script_mode, app_mode) based on the detected
+ * startup mode from detect_startup_mode().
+ * 
+ * @note Exported for use by main.c
+ */
+void configure_startup_mode(void);
+
+/* print_startup_banner() is now in display.c */
+
+/**
+ * @brief Run interactive mode main loop
+ * 
+ * Main loop for interactive menu-driven mode. Continuously displays menu,
+ * processes user input, and handles shared memory messages.
+ * 
+ * @note Exported for use by main.c
+ */
+void run_interactive_mode(void);
+
+/**
+ * @brief Run script mode main loop
+ * 
+ * Main loop for background script mode. Continuously processes shared memory
+ * messages without displaying menus.
+ * 
+ * @note Exported for use by main.c
+ */
+void run_script_mode(void);
+
+/**
+ * @brief Simple microsecond delay function
+ * 
+ * Implements a simple delay loop. Delay time is approximate and depends on
+ * CPU clock frequency.
+ * 
+ * @param[in] delay Delay time in microseconds (approximate)
+ */
 static void delay_us(uint32_t delay);
 
-/* Shared Memory Function Prototypes */
-static void init_shared_memory(void);
-static int read_data_area(char *buffer, int max_length);
-static int write_data_area(const char *data);
+/* ============================================================================
+ * Function Prototypes - Shared Memory Communication
+ * ============================================================================ */
+
+/**
+ * @brief Initialize shared memory region
+ * 
+ * Clears and initializes the shared memory region at SHARED_MEM_BASE (0x10000000).
+ * Sets all memory locations to zero to prepare for communication.
+ * 
+ * @note Exported for use by main.c
+ */
+void init_shared_memory(void);
+
+/**
+ * @brief Read data from shared memory data area
+ * 
+ * Reads a null-terminated string from the shared memory data area.
+ * 
+ * @param[out] buffer Buffer to store the read string
+ * @param[in] max_len Maximum length to read (buffer size)
+ * @return Number of bytes read, or -1 on error
+ * 
+ * @note Exported for use by other modules
+ */
+int read_data_area(char *buffer, int max_len);
+
+/**
+ * @brief Write data to shared memory data area
+ * 
+ * Writes a null-terminated string to the shared memory data area.
+ * 
+ * @param[in] data Null-terminated string to write
+ * @return 0 on success, -1 on error
+ * 
+ * @note Exported for use by other modules
+ */
+int write_data_area(const char *data);
+
+/**
+ * @brief Process shared memory message
+ * 
+ * Checks for incoming messages in shared memory, reads the command register,
+ * and dispatches to the appropriate message handler function.
+ * 
+ * @return 0 if no message processed, 1 if message was handled
+ */
 static int process_shared_memory_message(void);
+
+/**
+ * @brief Handle MSG_TYPE_INIT message
+ * 
+ * Processes initialization message from TCL script. Initializes shared memory
+ * and responds with success status.
+ * 
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_init(void);
+
+/**
+ * @brief Handle MSG_TYPE_RUN_APP message
+ * 
+ * Processes run application message. Executes the application with current
+ * configuration parameters and responds with completion status.
+ * 
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_run_app(void);
+
+/**
+ * @brief Handle MSG_TYPE_SET_PARAM message
+ * 
+ * Processes set parameter message. Parses parameter data and updates
+ * configuration accordingly.
+ * 
+ * @param[in] data Parameter data string from shared memory
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_set_param(const char *data);
+
+/**
+ * @brief Handle MSG_TYPE_GET_STATUS message
+ * 
+ * Processes get status message. Reads current status and configuration,
+ * formats response, and writes to shared memory.
+ * 
+ * @param[out] response Buffer to store formatted status response
+ * @param[in] max_len Maximum length of response buffer
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_get_status(char *response, int max_len);
+
+/**
+ * @brief Handle MSG_TYPE_CAPTURE_RAM message
+ * 
+ * Processes RAM capture message. Performs memory capture operation and
+ * responds with completion status.
+ * 
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_capture_ram(void);
+
+/**
+ * @brief Handle MSG_TYPE_SET_CONFIG message
+ * 
+ * Processes set configuration message. Parses configuration data and updates
+ * configuration structure.
+ * 
+ * @param[in] data Configuration data string from shared memory
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_set_config(const char *data);
+
+/**
+ * @brief Handle MSG_TYPE_GET_CONFIG message
+ * 
+ * Processes get configuration message. Reads requested configuration value
+ * and writes to shared memory response area.
+ * 
+ * @param[in] config_name Name of configuration parameter to retrieve
+ * @param[out] response Buffer to store configuration value
+ * @param[in] max_len Maximum length of response buffer
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_get_config(const char *config_name, char *response, int max_len);
+
+/**
+ * @brief Handle MSG_TYPE_EXIT message
+ * 
+ * Processes exit message. Sets running flag to 0 to exit application loop.
+ * 
+ * @return MSG_STATUS_SUCCESS
+ */
 static int handle_shared_memory_exit(void);
+
+/**
+ * @brief Handle MSG_TYPE_START_TEST message
+ * 
+ * Processes start test message. Initializes test configuration and prepares
+ * for test execution.
+ * 
+ * @param[in] data Test initialization data string
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_start_test(const char *data);
+
+/**
+ * @brief Handle MSG_TYPE_RUN_TEST message
+ * 
+ * Processes run test message. Executes the specified test case and updates
+ * test status.
+ * 
+ * @param[in] data Test execution data string
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_run_test(const char *data);
+
+/**
+ * @brief Handle MSG_TYPE_GET_TEST_STATUS message
+ * 
+ * Processes get test status message. Reads current test statistics and
+ * status, formats response.
+ * 
+ * @param[out] response Buffer to store test status response
+ * @param[in] max_len Maximum length of response buffer
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_get_test_status(char *response, int max_len);
+
+/**
+ * @brief Handle MSG_TYPE_RESET_PROCESSOR message
+ * 
+ * Processes reset processor message. Performs processor reset operation.
+ * 
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_reset_processor(void);
+    
+/**
+ * @brief Handle MSG_TYPE_GET_BOOT_MODE message
+ * 
+ * Processes get boot mode message. Reads boot mode register and returns
+ * boot mode information.
+ * 
+ * @param[out] response Buffer to store boot mode response
+ * @param[in] max_len Maximum length of response buffer
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_get_boot_mode(char *response, int max_len);
+
+/**
+ * @brief Handle MSG_TYPE_GET_DEVICE_DNA message
+ * 
+ * Processes get device DNA message. Reads device DNA registers and returns
+ * 96-bit DNA value.
+ * 
+ * @param[out] response Buffer to store device DNA response
+ * @param[in] max_len Maximum length of response buffer
+ * @return MSG_STATUS_SUCCESS on success, MSG_STATUS_ERROR on failure
+ */
 static int handle_shared_memory_get_device_dna(char *response, int max_len);
+
+/**
+ * @brief Reset the processor
+ * 
+ * Performs a software reset of the processor. This function may not return
+ * if reset is successful.
+*/
 static void reset_processor(void);
-static void initialize_test_config(void);
 
-/*
-* Main Application Entry Point
-* @return: int
-*/
-int main(void) {
-    xil_printf("\r\n=== JTAG UART Handler Starting ===\r\n");
-    
-    // Detect startup mode (JTAG vs Script)
-    startup_mode = detect_startup_mode();
-    
-    // Configure application based on detected mode
-    configure_startup_mode();
-    
-    // Print startup banner with mode information
-    print_startup_banner();
-    
-    // Initialize shared memory communication
-    init_shared_memory();
-    
-    // Initialize test configuration
-    initialize_test_config();
-    
-    // Main application loop based on startup mode
-    if (script_mode) {
-        xil_printf("Entering script mode...\r\n");
-        run_script_mode();
-    } else {
-        xil_printf("Entering interactive mode...\r\n");
-        run_interactive_mode();
-    }
-    
-    xil_printf("\r\n=== JTAG UART Handler Exiting ===\r\n");
-    return 0;
-}
-
-/*
- * Clear Screen Function
- * @return: void
+/**
+ * @brief Initialize test configuration structure
+ * 
+ * Initializes the test_config structure with default values for test execution.
+ * 
+ * @note Exported for use by main.c
  */
-static void clear_screen(void) {
-    // Send ANSI escape sequence to clear screen
-    xil_printf("\033[2J\033[H");
-}
+void initialize_test_config(void);
 
-/*
- * Print Banner Function
- * @return: void
+/* ============================================================================
+ * Main Application Entry Point
+ * 
+ * Note: main() function has been moved to main.c
+ * ============================================================================ */
+
+/* Display functions moved to display.c */
+
+/**
+ * @brief Get a single character input (no Enter required)
+ * 
+ * Reads a single character from UART input without requiring Enter key.
+ * This provides immediate response when user presses a key, useful for
+ * menu selections.
+ * 
+ * @return Character that was pressed (lowercase/uppercase as received)
+ * 
+ * @note Uses BSP inbyte() function for character input
+ * @note Exported for use by display.c
  */
-static void print_banner(void) {
-    clear_screen();
-    xil_printf("\r\n");
-    xil_printf("########  ######## ##     ## ####  ######  ########     ######  ##       #### \r\n");
-    xil_printf("##     ## ##       ##     ##  ##  ##    ## ##          ##    ## ##        ##  \r\n");
-    xil_printf("##     ## ##       ##     ##  ##  ##       ##          ##       ##        ##  \r\n");
-    xil_printf("##     ## ######   ##     ##  ##  ##       ######      ##       ##        ##  \r\n");
-    xil_printf("##     ## ##        ##   ##   ##  ##       ##          ##       ##        ##  \r\n");
-    xil_printf("##     ## ##         ## ##    ##  ##    ## ##          ##    ## ##        ##  \r\n");
-    xil_printf("########  ########    ###    ####  ######  ########     ######  ######## #### \r\n");
-    xil_printf("\r\n");
-    xil_printf("    JTAG UART Handler v2.0.0 (PS Version)\r\n");
-    xil_printf("    FPGA PS Baremetal Communication Interface\r\n");
-    xil_printf("\r\n");
-}
-
-/*
- * Show Main Menu
-* @return: void
-*/
-static void show_main_menu(void) {
-    print_banner();
-    xil_printf("=== MAIN MENU ===\r\n");
-    xil_printf("1. View Configuration\r\n");
-    xil_printf("2. Configure Settings\r\n");
-    xil_printf("3. Run Application\r\n");
-    xil_printf("4. Get Status\r\n");
-    xil_printf("5. Help\r\n");
-    xil_printf("0. Exit\r\n");
-    xil_printf("\r\nEnter choice (0-5): ");
-}
-
-/*
- * Show Configuration Menu
- * @return: void
- */
-static void show_config_menu(void) {
-    print_banner();
-    xil_printf("=== CONFIGURATION MENU ===\r\n");
-    xil_printf("1. Device Name (String)\r\n");
-    xil_printf("2. Base Address (Hex)\r\n");
-    xil_printf("3. Operation Mode (List)\r\n");
-    xil_printf("4. Timeout Value (Hex)\r\n");
-    xil_printf("5. Debug Level (List)\r\n");
-    xil_printf("6. View Current Configuration\r\n");
-    xil_printf("0. Back to Main Menu\r\n");
-    xil_printf("\r\nEnter choice (0-6): ");
-}
-
-/*
- * Display Current Configuration
- * @return: void
- */
-static void display_configuration(void) {
-    print_banner();
-    xil_printf("=== CURRENT CONFIGURATION ===\r\n");
-    xil_printf("\r\n");
-    xil_printf("Device Name:     %s\r\n", config.device_name);
-    xil_printf("Base Address:    0x%08X\r\n", config.base_address);
-    
-    const char *mode_names[] = {"", "Short", "Medium", "Long"};
-    xil_printf("Operation Mode:  %d (%s)\r\n", config.operation_mode, 
-               mode_names[config.operation_mode]);
-    
-    xil_printf("Timeout Value:   0x%08X (%u ms)\r\n", config.timeout_value, config.timeout_value);
-    
-    const char *debug_names[] = {"", "Low", "Medium", "High", "Verbose"};
-    xil_printf("Debug Level:     %d (%s)\r\n", config.debug_level, 
-               debug_names[config.debug_level]);
-    
-    xil_printf("\r\n");
-    xil_printf("Press any key to continue...");
-    get_char_input();
-}
-
-/*
- * Get Single Character Input (No Enter Required)
- * @return: char - The character pressed
- */
-static char get_char_input(void) {
+char get_char_input(void) {
     char c;
     c = inbyte();
     return c;
 }
 
-/*
- * Get String Input with Echo
- * @param buffer: Buffer to store the string
- * @param max_len: Maximum length of string
- * @param prompt: Prompt to display
-* @return: void
+/**
+ * @brief Get string input from user with echo
+ * 
+ * Reads a string from UART input with character echo, supports backspace
+ * for editing. Input is terminated by Enter key (CR or LF).
+ * 
+ * Features:
+ * - Character echo (shows what user types)
+ * - Backspace support (0x08 or 0x7F)
+ * - Maximum length enforcement
+ * - Only accepts printable characters
+ * - Handles bell character (Ctrl+G)
+ * 
+ * @param[out] buffer Buffer to store the input string (must be at least max_len bytes)
+ * @param[in] max_len Maximum length of string (buffer size - 1 for null terminator)
+ * @param[in] prompt Prompt string to display before input
+ * 
+ * @note Buffer will be null-terminated. Input is limited to max_len-1 characters.
 */
 static void get_string_input(char *buffer, int max_len, const char *prompt) {
     int idx = 0;
@@ -387,10 +543,24 @@ static void get_string_input(char *buffer, int max_len, const char *prompt) {
     }
 }
 
-/*
- * Get Hex Input with Echo
- * @param prompt: Prompt to display
- * @return: uint32_t - The hex value entered
+/**
+ * @brief Get hexadecimal input from user with echo
+ * 
+ * Reads hexadecimal value from UART input. Supports optional 0x prefix and
+ * hexadecimal digits (0-9, A-F, a-f). Input is terminated by Enter key.
+ * 
+ * Features:
+ * - Character echo
+ * - Backspace support
+ * - Accepts 0x or 0X prefix
+ * - Only accepts hex digits
+ * - Beeps on invalid characters
+ * - Converts input to uint32_t using strtoul()
+ * 
+ * @param[in] prompt Prompt string to display before input
+ * @return 32-bit unsigned integer value parsed from hex input
+ * 
+ * @note Returns 0 if no valid hex digits entered
  */
 static uint32_t get_hex_input(const char *prompt) {
     char input[32];
@@ -435,12 +605,18 @@ static uint32_t get_hex_input(const char *prompt) {
     return value;
 }
 
-/*
- * Get List Selection (No Enter Required)
- * @param prompt: Prompt to display
- * @param options: Array of option strings
- * @param num_options: Number of options
- * @return: uint32_t - The selected option number
+/**
+ * @brief Get list selection from user (no Enter required)
+ * 
+ * Displays a numbered list of options and waits for user to press a number key.
+ * Selection is immediate - no Enter key required. Beeps on invalid input.
+ * 
+ * @param[in] prompt Prompt string to display before options
+ * @param[in] options Array of option strings to display (numbered 1-N)
+ * @param[in] num_options Number of options in the array (max 9)
+ * @return Selected option number (1-based index: 1, 2, 3, ...)
+ * 
+ * @note Only accepts numeric keys '1' through '9'. Beeps on other keys.
  */
 static uint32_t get_list_selection(const char *prompt, const char *options[], int num_options) {
     char c;
@@ -468,10 +644,20 @@ static uint32_t get_list_selection(const char *prompt, const char *options[], in
     return selection;
 }
 
-/*
- * Handle Main Menu Selection
- * @param choice: The menu choice
- * @return: void
+/**
+ * @brief Handle main menu selection
+ * 
+ * Processes the user's main menu choice and executes the corresponding action:
+ * - '1': Display current configuration
+ * - '2': Show configuration menu
+ * - '3': Run application with current settings
+ * - '4': Display system status
+ * - '5': Show help information
+ * - '0': Exit application
+ * 
+ * @param[in] choice Character representing the menu choice ('0'-'5')
+ * 
+ * @note Beeps on invalid choice. Sets running=0 when Exit is selected.
  */
 static void handle_main_menu_selection(char choice) {
     switch (choice) {
@@ -546,10 +732,21 @@ static void handle_main_menu_selection(char choice) {
     }
 }
 
-/*
- * Handle Configuration Menu Selection
- * @param choice: The menu choice
- * @return: void
+/**
+ * @brief Handle configuration menu selection
+ * 
+ * Processes the user's configuration menu choice and updates the corresponding setting:
+ * - '1': Update device name
+ * - '2': Update base address
+ * - '3': Update operation mode
+ * - '4': Update timeout value
+ * - '5': Update debug level
+ * - '6': Display current configuration
+ * - '0': Return to main menu (handled by caller)
+ * 
+ * @param[in] choice Character representing the menu choice ('0'-'6')
+ * 
+ * @note Beeps on invalid choice. Choice '0' does nothing (return handled by caller).
  */
 static void handle_config_menu_selection(char choice) {
     switch (choice) {
@@ -587,9 +784,13 @@ static void handle_config_menu_selection(char choice) {
     }
 }
 
-/*
- * Update Device Name
- * @return: void
+/**
+ * @brief Update device name configuration
+ * 
+ * Prompts user for new device name using string input, then updates
+ * config.device_name. Displays current value before prompting for new value.
+ * 
+ * @note Maximum length is MAX_STRING_LEN (64 characters)
  */
 static void update_device_name(void) {
     print_banner();
@@ -604,9 +805,13 @@ static void update_device_name(void) {
     get_char_input();
 }
 
-/*
- * Update Base Address
-* @return: void
+/**
+ * @brief Update base address configuration
+ * 
+ * Prompts user for new base address using hex input, then updates
+ * config.base_address. Displays current value before prompting for new value.
+ * 
+ * @note Input is interpreted as hexadecimal (supports 0x prefix)
 */
 static void update_base_address(void) {
     print_banner();
@@ -621,9 +826,15 @@ static void update_base_address(void) {
     get_char_input();
 }
 
-/*
- * Update Operation Mode
-* @return: void
+/**
+ * @brief Update operation mode configuration
+ * 
+ * Prompts user to select operation mode from a list:
+ * - 1: Short
+ * - 2: Medium
+ * - 3: Long
+ * 
+ * Updates config.operation_mode with the selected value.
 */
 static void update_operation_mode(void) {
     const char *options[] = {"Short", "Medium", "Long"};
@@ -681,11 +892,17 @@ static void update_debug_level(void) {
     get_char_input();
 }
 
-/*
-* Detect Startup Mode
-* @return: int - Detected startup mode
+/**
+ * @brief Detect the startup mode from hardware registers
+ * 
+ * Reads the startup mode register to determine how the application was launched
+ * (JTAG interactive, JTAG script, UART interactive, or UART script).
+ * 
+ * @return Detected startup mode value (MODE_JTAG_INTERACTIVE, MODE_JTAG_SCRIPT, etc.)
+ * 
+ * @note Exported for use by main.c
 */
-static int detect_startup_mode(void) {
+int detect_startup_mode(void) {
     uint32_t mode_reg_value = 0;
     
     xil_printf("Detecting startup mode...\r\n");
@@ -702,11 +919,15 @@ static int detect_startup_mode(void) {
     return MODE_JTAG_INTERACTIVE;
 }
 
-/*
-* Configure Application Based on Startup Mode
-* @return: void
-*/
-static void configure_startup_mode(void) {
+/**
+ * @brief Configure application based on detected startup mode
+ * 
+ * Sets application variables (script_mode, app_mode) based on the detected
+ * startup mode from detect_startup_mode().
+ * 
+ * @note Exported for use by main.c
+ */
+void configure_startup_mode(void) {
     xil_printf("Configuring application for startup mode: 0x%08X\r\n", startup_mode);
     
     switch (startup_mode) {
@@ -747,62 +968,17 @@ static void configure_startup_mode(void) {
     }
 }
 
-/*
-* Print Startup Banner with Mode Information
-* @return: void
-*/
-static void print_startup_banner(void) {
-    print_banner();
-    
-    // Print mode-specific information
-    switch (startup_mode) {
-        case MODE_JTAG_INTERACTIVE:
-            xil_printf("=== STARTUP MODE: JTAG INTERACTIVE ===\r\n");
-            xil_printf("Interface: JTAG UART\r\n");
-            xil_printf("Operation: Interactive Menu System\r\n");
-            break;
-            
-        case MODE_JTAG_SCRIPT:
-            xil_printf("=== STARTUP MODE: JTAG SCRIPT ===\r\n");
-            xil_printf("Interface: JTAG UART\r\n");
-            xil_printf("Operation: Background Command Processing\r\n");
-            break;
-            
-        case MODE_UART_INTERACTIVE:
-            xil_printf("=== STARTUP MODE: UART INTERACTIVE ===\r\n");
-            xil_printf("Interface: UART\r\n");
-            xil_printf("Operation: Interactive Menu System\r\n");
-            break;
-            
-        case MODE_UART_SCRIPT:
-            xil_printf("=== STARTUP MODE: UART SCRIPT ===\r\n");
-            xil_printf("Interface: UART\r\n");
-            xil_printf("Operation: Background Command Processing\r\n");
-            break;
-            
-        default:
-            xil_printf("=== STARTUP MODE: DEFAULT INTERACTIVE ===\r\n");
-            xil_printf("Interface: JTAG UART\r\n");
-            xil_printf("Operation: Interactive Menu System\r\n");
-            break;
-    }
-    
-    xil_printf("\r\n");
-    
-    if (script_mode) {
-        xil_printf("Script Mode Active - Commands processed via messages\r\n");
-    } else {
-        xil_printf("Interactive Mode Active - Use menu system\r\n");
-    }
-    
-    xil_printf("\r\n");
-}
+/* print_startup_banner() moved to display.c */
 
-/*
- * Run Interactive Mode
-* @return: void
-*/
-static void run_interactive_mode(void) {
+/**
+ * @brief Run interactive mode main loop
+ * 
+ * Main loop for interactive menu-driven mode. Continuously displays menu,
+ * processes user input, and handles shared memory messages.
+ * 
+ * @note Exported for use by main.c
+ */
+void run_interactive_mode(void) {
     while (running) {
         // Process shared memory messages first
         process_shared_memory_message();
@@ -813,11 +989,15 @@ static void run_interactive_mode(void) {
     }
 }
 
-/*
- * Run Script Mode
- * @return: void
+/**
+ * @brief Run script mode main loop
+ * 
+ * Main loop for background script mode. Continuously processes shared memory
+ * messages without displaying menus.
+ * 
+ * @note Exported for use by main.c
  */
-static void run_script_mode(void) {
+void run_script_mode(void) {
     xil_printf("Script mode active - Processing commands...\r\n");
     xil_printf("Send 'exit' to quit script mode\r\n");
     xil_printf("Send 'help' for available commands\r\n");
@@ -890,11 +1070,15 @@ static void delay_us(uint32_t delay) {
     }
 }
 
-/*
- * Initialize Shared Memory Communication
- * @return: void
+/**
+ * @brief Initialize shared memory region
+ * 
+ * Clears and initializes the shared memory region at SHARED_MEM_BASE (0x10000000).
+ * Sets all memory locations to zero to prepare for communication.
+ * 
+ * @note Exported for use by main.c
  */
-static void init_shared_memory(void) {
+void init_shared_memory(void) {
     xil_printf("Initializing shared memory communication...\r\n");
     xil_printf("Base address: 0x%08X\r\n", SHARED_MEM_BASE);
     xil_printf("Size: 0x%08X\r\n", SHARED_MEM_SIZE);
@@ -907,12 +1091,18 @@ static void init_shared_memory(void) {
     xil_printf("Shared memory initialized\r\n");
 }
 
-/*
- * Write Data Area to Shared Memory
- * @param data: Data string to write
- * @return: int - 1 if successful, 0 if error
+/**
+ * @brief Write data to shared memory data area
+ * 
+ * Writes a null-terminated string to the shared memory data area at
+ * SHARED_MEM_BASE + DATA_AREA_OFFSET. Data is written in 4-byte chunks.
+ * 
+ * @param[in] data Null-terminated string to write
+ * @return 1 on success, 0 on error
+ * 
+ * @note Exported for use by other modules
  */
-static int write_data_area(const char *data) {
+int write_data_area(const char *data) {
     uint32_t base_addr = SHARED_MEM_BASE + DATA_AREA_OFFSET;
     int data_length = strlen(data);
     
@@ -934,13 +1124,20 @@ static int write_data_area(const char *data) {
     return 1;
 }
 
-/*
- * Read Data Area from Shared Memory
- * @param buffer: Buffer to store data
- * @param max_len: Maximum buffer length
- * @return: int - 1 if successful, 0 if error
+/**
+ * @brief Read data from shared memory data area
+ * 
+ * Reads a null-terminated string from the shared memory data area at
+ * SHARED_MEM_BASE + DATA_AREA_OFFSET. Data is read in 4-byte chunks
+ * until a null terminator is found or max_len is reached.
+ * 
+ * @param[out] buffer Buffer to store the read string
+ * @param[in] max_len Maximum length to read (buffer size)
+ * @return 1 on success, 0 on error
+ * 
+ * @note Exported for use by other modules
  */
-static int read_data_area(char *buffer, int max_len) {
+int read_data_area(char *buffer, int max_len) {
     uint32_t base_addr = SHARED_MEM_BASE + DATA_AREA_OFFSET;
     int idx = 0;
     
@@ -1272,11 +1469,14 @@ static int handle_shared_memory_exit(void) {
     return 1;
 }
 
-/*
- * Initialize Test Configuration
- * @return: void
+/**
+ * @brief Initialize test configuration structure
+ * 
+ * Initializes the test_config structure with default values for test execution.
+ * 
+ * @note Exported for use by main.c
  */
-static void initialize_test_config(void) {
+void initialize_test_config(void) {
     test_config.number_of_tests = 0;
     test_config.current_test = 0;
     test_config.test_timeout = 10000;
@@ -1574,4 +1774,199 @@ static int handle_shared_memory_get_device_dna(char *response, int max_len) {
     xil_printf("PS Device DNA (96-bit): 0x%08X%08X%08X\r\n", dna_2_lower, dna_1, dna_0);
     
     return 1;
+}
+
+/* ============================================================================
+ * JTAG UART Interface Functions
+ * ============================================================================ */
+
+/**
+ * @brief Initialize JTAG UART communication
+ * 
+ * Initializes the JTAG UART interface for communication. This function
+ * performs any necessary setup for UART communication, though in most
+ * Xilinx BSP systems, the UART is already initialized during system startup.
+ * 
+ * @return 0 on success, -1 on error
+ * 
+ * @note This is a wrapper function that can be used for future UART-specific
+ *       initialization if needed. Currently, the BSP handles UART initialization.
+ */
+int init_jtag_uart(void) {
+    xil_printf("JTAG UART initialized\r\n");
+    return 0;
+}
+
+/**
+ * @brief Cleanup JTAG UART communication
+ * 
+ * Performs cleanup operations for the JTAG UART interface. This function
+ * can be used to release resources or perform cleanup before shutdown.
+ * 
+ * @note Currently a placeholder function for future use.
+ */
+void cleanup_jtag_uart(void) {
+    xil_printf("JTAG UART cleanup\r\n");
+}
+
+/**
+ * @brief Send a response string via UART
+ * 
+ * Sends a response string to the UART output. Uses xil_printf for
+ * formatted output to ensure proper formatting with newlines.
+ * 
+ * @param[in] response Null-terminated response string to send
+ * @return Number of characters sent, or -1 on error
+ */
+int send_response(const char *response) {
+    if (response == NULL) {
+        return -1;
+    }
+    
+    xil_printf("%s\r\n", response);
+    return (int)strlen(response);
+}
+
+/**
+ * @brief Receive a command string from UART
+ * 
+ * Reads a command string from UART input until Enter key is pressed.
+ * Supports backspace for editing. Input is terminated by Enter (CR or LF).
+ * 
+ * @param[out] command Buffer to store the received command
+ * @param[in] max_len Maximum length of command (buffer size - 1)
+ * @return Number of characters read, or -1 on error
+ * 
+ * @note Buffer will be null-terminated. Input is limited to max_len-1 characters.
+ */
+int receive_command(char *command, int max_len) {
+    if (command == NULL || max_len <= 0) {
+        return -1;
+    }
+    
+    int idx = 0;
+    char c;
+    
+    while (1) {
+        c = inbyte();
+        
+        // Handle Enter key
+        if (c == '\r' || c == '\n') {
+            command[idx] = '\0';
+            xil_printf("\r\n");
+            break;
+        }
+        
+        // Handle Backspace
+        if ((c == '\b' || c == 0x7F) && idx > 0) {
+            idx--;
+            xil_printf("\b \b");
+            continue;
+        }
+        
+        // Accept printable characters
+        if (isprint(c) && idx < max_len - 1) {
+            command[idx++] = c;
+            outbyte(c); // echo
+        }
+        else if (c == '\a') {
+            // Handle bell character
+            xil_printf("\a");
+        }
+    }
+    
+    return idx;
+}
+
+/**
+ * @brief Handle a received command string
+ * 
+ * Parses and processes a command string received from UART or other source.
+ * Command strings should match the command definitions in jtag_uart_handler.h.
+ * 
+ * Supported commands:
+ * - CMD_INIT ("init"): Initialize the application
+ * - CMD_RUN_APP ("run_app"): Run the application with current settings
+ * - CMD_SET_PARAM ("set_param"): Set a parameter (requires additional data)
+ * - CMD_GET_STATUS ("get_status"): Get current status
+ * - CMD_CAPTURE_RAM ("capture_ram"): Capture RAM data
+ * - CMD_EXIT ("exit"): Exit the application
+ * - CMD_HELP ("help"): Display help information
+ * 
+ * @param[in] command Null-terminated command string to process
+ * 
+ * @note Commands are case-sensitive. Some commands may require additional
+ *       data which should be provided via shared memory or follow-up input.
+ */
+void handle_command(const char *command) {
+    if (command == NULL) {
+        return;
+    }
+    
+    // Remove leading whitespace
+    while (isspace(*command)) {
+        command++;
+    }
+    
+    // Compare command (case-sensitive)
+    if (strcmp(command, CMD_INIT) == 0) {
+        xil_printf("Command: INIT\r\n");
+        handle_shared_memory_init();
+        send_response(RESPONSE_INIT_OK);
+    }
+    else if (strcmp(command, CMD_RUN_APP) == 0) {
+        xil_printf("Command: RUN_APP\r\n");
+        handle_shared_memory_run_app();
+        send_response(RESPONSE_RUN_OK);
+    }
+    else if (strncmp(command, CMD_SET_PARAM, strlen(CMD_SET_PARAM)) == 0) {
+        xil_printf("Command: SET_PARAM\r\n");
+        const char *param_data = command + strlen(CMD_SET_PARAM);
+        while (isspace(*param_data)) {
+            param_data++;
+        }
+        if (handle_shared_memory_set_param(param_data)) {
+            send_response(RESPONSE_PARAM_SET_OK);
+        } else {
+            send_response(RESPONSE_ERROR);
+        }
+    }
+    else if (strcmp(command, CMD_GET_STATUS) == 0) {
+        xil_printf("Command: GET_STATUS\r\n");
+        char response[MAX_RESPONSE_LEN];
+        if (handle_shared_memory_get_status(response, sizeof(response))) {
+            send_response(response);
+        } else {
+            send_response(RESPONSE_ERROR);
+        }
+    }
+    else if (strcmp(command, CMD_CAPTURE_RAM) == 0) {
+        xil_printf("Command: CAPTURE_RAM\r\n");
+        if (handle_shared_memory_capture_ram()) {
+            send_response(RESPONSE_RAM_CAPTURE_OK);
+        } else {
+            send_response(RESPONSE_ERROR);
+        }
+    }
+    else if (strcmp(command, CMD_EXIT) == 0) {
+        xil_printf("Command: EXIT\r\n");
+        handle_shared_memory_exit();
+        send_response(RESPONSE_EXIT_OK);
+    }
+    else if (strcmp(command, CMD_HELP) == 0) {
+        xil_printf("Command: HELP\r\n");
+        xil_printf("Available commands:\r\n");
+        xil_printf("  %s - Initialize application\r\n", CMD_INIT);
+        xil_printf("  %s - Run application\r\n", CMD_RUN_APP);
+        xil_printf("  %s <param> <value> - Set parameter\r\n", CMD_SET_PARAM);
+        xil_printf("  %s - Get status\r\n", CMD_GET_STATUS);
+        xil_printf("  %s - Capture RAM\r\n", CMD_CAPTURE_RAM);
+        xil_printf("  %s - Exit application\r\n", CMD_EXIT);
+        xil_printf("  %s - Show this help\r\n", CMD_HELP);
+    }
+    else {
+        xil_printf("Unknown command: %s\r\n", command);
+        xil_printf("Type '%s' for available commands\r\n", CMD_HELP);
+        send_response(RESPONSE_ERROR);
+    }
 }

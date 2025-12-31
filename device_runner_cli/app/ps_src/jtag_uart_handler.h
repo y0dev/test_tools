@@ -56,6 +56,20 @@ int init_jtag_uart(void);
 void cleanup_jtag_uart(void);
 int send_response(const char *response);
 int receive_command(char *command, int max_len);
+int write_data_area(const char *data);
+int read_data_area(char *buffer, int max_len);
 void handle_command(const char *command);
+
+/* Functions used by main() */
+int detect_startup_mode(void);
+void configure_startup_mode(void);
+void init_shared_memory(void);
+void initialize_test_config(void);
+void run_interactive_mode(void);
+void run_script_mode(void);
+
+/* Global variables used by main() */
+extern volatile int startup_mode;
+extern volatile int script_mode;
 
 #endif /* JTAG_UART_HANDLER_H */

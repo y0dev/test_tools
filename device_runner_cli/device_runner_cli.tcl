@@ -36,7 +36,7 @@ set ::param2 ""
 set ::param3 ""
 set ::xsdb_path ""
 set ::jtag_tcp ""
-set ::clk_elf_file ""
+set ::ps_app_elf_file ""
 
 # Command line arguments
 set ::arch          "zynq"
@@ -47,6 +47,16 @@ set ::ps_ref_clk    0
 set ::term_app      "device_runner_term.bat"
 set ::log_dir       "logs"
 set ::bit_file      ""
+
+#--------------------------------------------------------------------
+# Source helper functions
+#--------------------------------------------------------------------
+if {[file exists "lib/jtag_reg.tcl"]} {
+    source lib/jtag_reg.tcl
+    puts "Loaded helper functions from lib/jtag_reg.tcl"
+} else {
+    puts "Warning: lib/jtag_reg.tcl not found - some helper functions may be unavailable"
+}
 
 #--------------------------------------------------------------------
 # This function parses an INI configuration file
@@ -160,20 +170,20 @@ proc parse_command_line_args {} {
     global argv ps_ref_clks
     
     # Default values
-    set args_array(arch)          "zynq"
-    set args_array(mode)          "user"
-    set args_array(boot_mode)     "jtag"
-    set args_array(hw_server)     "localhost"
-    set args_array(ps_ref_clk)    "0"
-    set args_array(term_app)      "device_runner_term.bat"
-    set args_array(log_dir)       "logs"
-    set args_array(tool_script)   ""
-    set args_array(clk_elf_file)  ""
-    set args_array(bit_file)      ""
+    set args_array(arch)             "zynqMP"
+    set args_array(mode)             "user"
+    set args_array(boot_mode)        "jtag"
+    set args_array(hw_server)        "localhost"
+    set args_array(ps_ref_clk)       "0"
+    set args_array(term_app)         "device_runner_term.bat"
+    set args_array(log_dir)          "logs"
+    set args_array(tool_script)      ""
+    set args_array(ps_app_elf_file)  ""
+    set args_array(bit_file)         ""
+    set args_array(fsbl_path)        ""
 
     # default filename values
-    set clk_elf_file                ""
-    set script_cmds                 "zup_cmds.tcl"
+    set ps_app_elf_file                ""
     
     # Parse command line arguments
     for {set i 0} {$i < [llength $argv]} {incr i} {
@@ -283,6 +293,13 @@ proc parse_command_line_args {} {
                     log_message "Bit file set to: $args_array(bit_file)"
                 }
             }
+            "-fsbl_path" {
+                incr i
+                if {$i < [llength $argv]} {
+                    set args_array(fsbl_path) [lindex $argv $i]
+                    log_message "FSBL path set to: $args_array(fsbl_path)"
+                }
+            }
             "-help" {
                 show_help
                 exit 0
@@ -295,18 +312,19 @@ proc parse_command_line_args {} {
             }
         }
     }
-    
-    # make sure it's a valid ps ref clock frequency
-    if {[lsearch -exact $ps_ref_clks $args_array(ps_ref_clk)] < 0} {
-        puts " ERROR: Invalid PS_REF_CLK: $args_array(ps_ref_clk) MHz"
-        puts "        Value must match external PS_REF_CLK frequency!!"
-        puts "        Valid values: [join $ps_ref_clks ", "] MHz"
-        return 1
+
+    # Validate FSBL path if provided
+    if {$args_array(fsbl_path) != ""} {
+        if {![file exists $args_array(fsbl_path)]} {
+            puts " ERROR: FSBL file not found: $args_array(fsbl_path)"
+            return 1
+        }
+        puts "INFO: FSBL file validated: $args_array(fsbl_path)"
     }
 
     # Construct the .elf filename based on ps ref clk freq value
-    set clk_elf_file "tool_zup_${args_array(ps_ref_clk)}mhz.elf"
-    set args_array(clk_elf_file) $clk_elf_file
+    set ps_app_elf_file "bin/jtag_app.elf"
+    set args_array(ps_app_elf_file) $ps_app_elf_file
     
     # Set global variables for backward compatibility
     set ::arch $args_array(arch)
@@ -316,8 +334,9 @@ proc parse_command_line_args {} {
     set ::ps_ref_clk $args_array(ps_ref_clk)
     set ::term_app $args_array(term_app)
     set ::log_dir $args_array(log_dir)
-    set ::clk_elf_file $args_array(clk_elf_file)
+    set ::ps_app_elf_file $args_array(ps_app_elf_file)
     set ::bit_file $args_array(bit_file)
+    set ::fsbl_path $args_array(fsbl_path)
 
     return [array get args_array]
 
@@ -452,7 +471,7 @@ proc device_command {command} {
     global log_file
     
     # Default command register address
-    set command_addr 0xXXXX0000
+    set command_addr 0x10000000
     
     # Log the command
     log_message "Device Command: $command"
@@ -515,7 +534,7 @@ proc device_response {command {timeout 5000}} {
     global log_file
     
     # Default response register address
-    set response_addr 0xXXXX0004
+    set response_addr 0x10000004
     
     # Log the response request
     log_message "Requesting device response for: $command"
@@ -587,6 +606,7 @@ if {[file exists "messages.tcl"]} {
 proc conn_device {hw_server_host {bit_file_path ""}} {
     global log_file
     
+    
     log_message "Connecting to device: $hw_server_host"
     puts "\n\nConnecting to device  : $hw_server_host"
 
@@ -594,15 +614,23 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     
     # Step 1: Connect to hardware server
     puts "Step 1: Connecting to hardware server..."
+    puts "Using remote connection to $hw_server_host:3121"
+    log_message "Using remote connection to $hw_server_host:3121"
     while {[catch {connect -host $hw_server_host -port 3121}]} {
         puts -nonewline "."
         flush stdout
         after 2000
     }
+    # bpremove -all
     
     # Step 2: List available targets
     puts "Step 2: Listing available targets..."
     targets -set -nocase -filter {name =~"PSU*"}
+
+    # Updating the boot mode
+    # targets -set -nocase -filter {name =~ "*PSU*"}
+    # stop
+    # mwr 0xff5e0200 0x0100
     
     
     # Step 3: Reset all cores
@@ -610,19 +638,21 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     rst -system
     after 1000
 
-    # Step 4: Find and Reset APU
-    targets -set -nocase -filter {name =~"APU*"}
-    puts "Step 4: Resetting APU..."
-    rst -processor
+    puts "Step 4: Finding APU target..."
+    targets -set -nocase -filter {name =~ "*APU*"}
+
+    # Step 5: Resetting APU
+    puts "Step 5: Resetting APU..."
+    rst -system
     after 1000
+
+    # Step 6: Loading hardware platform
+    puts "Step 6: Loading hardware platform..."
+    loadhw -hw F:/Software/Embedded/00_Workspace/vitis/hello_world/platform/export/platform/hw/kv260_example.xsa
+    configparams force-mem-access 1
     
-    # Step 4: Initialize PSU
-    #puts "Step 4: Initializing PSU..."
-    #source psu_init.tcl
-    #psu_init
-    
-    # Step 5: Program FPGA with bit file
-    puts "Step 5: Programming FPGA..."
+    # Step 7: Program FPGA with bit file
+    puts "Step 7: Programming FPGA..."
     if {$bit_file_path != ""} {
         if {[file exists $bit_file_path]} {
             puts "Programming FPGA with: $bit_file_path"
@@ -635,21 +665,35 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         puts "Warning: No bit file specified for FPGA programming"
     }
 
-    # Step 6: Disabling debug firewall
+    # Step 8: Disabling debug firewall
+    puts "Step 8: Disabling debug firewall..."
     configparams force-mem-access 1
     
-    # Step 7: Connect to target a53_0
-    puts "Step 7: Connecting to target a53_0..."
+    # Step 9: Connect to target a53_0
+    puts "Step 9: Connecting to target a53_0..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     
-    # Step 8: Verify target is ready
+    # Step 10: Verify target is ready and reset processor
+    puts "Step 10: Resetting processor..."
     rst -processor
+    after 1000
 
-    # Download FSBL
-    dow $fsbl_path
-    set bp_47_40_fsbl_bp [bpadd -addr &XFsbl_Exit]
-    con -block -timeout 60
-    bpremove $bp_47_40_fsbl_bp
+    # Step 11: Download FSBL (if path is provided)
+    puts "Step 11: Checking for FSBL..."
+    if {[info exists ::fsbl_path] && $::fsbl_path != ""} {
+        if {[file exists $::fsbl_path]} {
+            puts "Downloading FSBL from: $::fsbl_path"
+            dow $::fsbl_path
+            set bp_fsbl_exit [bpadd -addr &XFsbl_Exit]
+            con -block -timeout 60
+            bpremove $bp_fsbl_exit
+        } else {
+            puts "Warning: FSBL file not found: $::fsbl_path"
+            puts "Skipping FSBL download"
+        }
+    } else {
+        puts "Info: FSBL path not provided, skipping FSBL download"
+    }
     
 
     # Check if Microblaze is enabled
@@ -669,9 +713,9 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         set microblaze_enabled 0
     }
     
-    # Setup MDM and Microblaze only if enabled
+    # Step 12: Setup MDM and Microblaze only if enabled
     if {$microblaze_enabled} {
-        puts "Microblaze enabled - Setting up MDM and downloading Microblaze app..."
+        puts "Step 12: Microblaze enabled - Setting up MDM and downloading Microblaze app..."
         
         # Setup MDM
         configparams mdm-detect-bscan-mask 2
@@ -688,13 +732,14 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
             puts "Warning: Microblaze enabled but mb_elf not defined"
         }
     } else {
-        puts "Microblaze disabled - Skipping Microblaze setup"
+        puts "Step 12: Microblaze disabled - Skipping Microblaze setup"
     }
 
-    # Reset A53
+    # Step 13: Final A53 connection and reset
+    puts "Step 13: Final A53 connection and reset..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     rst -processor
-
+    after 1000
 }
 
 
@@ -718,6 +763,7 @@ proc show_help {} {
     puts "  -log_dir <dir>          Log directory (default: logs)"
     puts "  -ini_config <file>      INI configuration file for script mode"
     puts "  -bit_file <file>        Bit file for FPGA programming"
+    puts "  -fsbl_path <file>       FSBL (First Stage Boot Loader) ELF file path"
     puts "  -xsdb_path <path>       Path to XSDB executable"
     puts "  -jtag_tcp <url>         JTAG TCP connection URL"
     puts "  -help                   Show this help message"
@@ -729,9 +775,9 @@ proc show_help {} {
     puts "  [connection]"
     puts "  hw_server=localhost"
     puts "  [registers]"
-    puts "  command_addr=0xXXXX0000"
-    puts "  response_addr=0xXXXX0004"
-    puts "  startup_mode_addr=0xXXXX0008"
+    puts "  command_addr=0x10000000"
+    puts "  response_addr=0x10000004"
+    puts "  startup_mode_addr=0x10000008"
     puts "  [commands]"
     puts "  cmd1=init"
     puts "  cmd2=run_app"
@@ -759,10 +805,21 @@ proc poll_response_register {} {
         
         while {$running} {
             # Check response register
-            set resp_value [mrd $resp_reg_addr]
+            set resp_value_str [mrd $resp_reg_addr]
+            
+            # Extract hex value from mrd output (format: "address:   value")
+            # Remove address part and whitespace, keep only the hex value
+            if {[regexp {:\s+([0-9a-fA-F]+)} $resp_value_str match resp_value_hex]} {
+                set resp_value 0x$resp_value_hex
+            } else {
+                # Fallback: try to extract last word if regex fails
+                set resp_value_hex [lindex [split $resp_value_str ":"] end]
+                set resp_value_hex [string trim $resp_value_hex]
+                set resp_value 0x$resp_value_hex
+            }
             
             # Check for EXIT response or termination condition
-            if {[expr $resp_value & $::RESP_ERROR]} {
+            if {[expr {$resp_value & $::RESP_ERROR}]} {
                 # Error response - read error data
                 set error_data [read_data_area 1024]
                 puts "Error response: '$error_data'"
@@ -771,7 +828,7 @@ proc poll_response_register {} {
                 mwr $resp_reg_addr 0
                 # Optionally exit on error
                 # set running 0
-            } elseif {[expr $resp_value & $::RESP_SUCCESS]} {
+            } elseif {[expr {$resp_value & $::RESP_SUCCESS}]} {
                 # Success response - read data if available
                 set response_data [read_data_area 1024]
                 if {[string match "*EXIT*" $response_data] || [string match "*exit*" $response_data]} {
@@ -807,15 +864,6 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
     # Connect to device, reset cores and connect to target a53_0
     conn_device $hw_server $::bit_file
 
-    # Initialize shared memory communication if available
-    if {[info exists ::shared_mem_base]} {
-        puts "Initializing shared memory communication..."
-        init_shared_memory
-        puts "Shared memory communication ready"
-    } else {
-        puts "Shared memory communication not available - using legacy mode"
-    }
-
     # Get the tcp port number to communicate with device via uart/jtag
     set tcp_port_num [jtagterminal -socket]
     puts "TCP port number: $tcp_port_num"
@@ -827,12 +875,22 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         
         exec $term_app localhost $tcp_port_num &
         if {$boot_mode == "jtag"} {
-            puts "Downloading Device Application .elf file"
+            puts "Downloading Device Application .elf file ($app_elf)"
             dow $app_elf
+            
+            bpremove -all
+
+            # Clear registers
+            puts "Initializing shared memory communication..."
+            init_shared_memory
+            puts "Shared memory communication ready"
+
+            after 5000
+            puts "Place A53_0 into execution state..."
+            con
+
         }
 
-        puts "Place A53_0 into execution state..."
-        con
 
         # Poll response register in a loop to keep the tcp socket alive
         poll_response_register
@@ -843,7 +901,9 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         run_script_mode_from_ini $::script_config_file
         
         if {$boot_mode == "jtag"} {
-            puts "Downloading Device Application .elf file"
+            # Ensure A53 target is selected before download
+            targets -set -nocase -filter {name =~ "*a53*#0"}
+            puts "Downloading Device Application .elf file ($app_elf)"
             dow $app_elf
         }
         puts "Place A53_0 into execution state..."
@@ -895,15 +955,17 @@ proc init_app {} {
         set boot_mode $args(boot_mode)
         set hw_server $args(hw_server)
         set ps_ref_clk $args(ps_ref_clk)
-        set app_elf $args(clk_elf_file)
+        set app_elf $args(ps_app_elf_file)
         set term_app $args(term_app)
         set log_dir $args(log_dir)
+        set fsbl_path $args(fsbl_path)
         
         puts "Xilinx Device type    : $arch"
         puts "Mode                  : $mode"
         puts "Boot mode             : $boot_mode"
         puts "Hardware server       : $hw_server"
         puts "PS reference clock    : $ps_ref_clk MHz"
+        puts "FSBL Path             : $fsbl_path"
         puts "Bit file              : $::bit_file"
         puts "Log directory         : $log_dir"
 
@@ -938,6 +1000,14 @@ proc init_app {} {
             exit 1
         }
     }
+  
+    # If user mode, display main menu before connecting to device
+    if {$mode == "user"} {
+        main_menu
+    } 
+    
+    # Connect to device and execute in the specified mode
+    run_device_connection $hw_server $mode $boot_mode $term_app $app_elf
 
     # If script mode is enabled, parse INI file and get hardware server and bit file
     if {$mode == "script" && $::script_mode_enabled} {
@@ -959,14 +1029,6 @@ proc init_app {} {
         set ::bit_file $ini_bit_file
     }
 
-    # If user mode, display main menu before connecting to device
-    if {$mode == "user"} {
-        main_menu
-    }
-    
-    # Connect to device and execute in the specified mode
-    run_device_connection $hw_server $mode $boot_mode $term_app $app_elf
-    
     
 }
 
@@ -2361,7 +2423,7 @@ proc show_help_menu {} {
 #--------------------------------------------------------------------
 proc exit_application {} {
     puts ""
-    puts -nonewline "Quit Device Runner CLI? (y/[n]) -> "
+    puts -nonewline "Quit Device Runner CLI? (y/\[n\]) -> "
     flush stdout
     set confirm [gets stdin]
     
@@ -2533,9 +2595,9 @@ proc run_script_mode_from_ini {ini_file} {
     
     # Get configuration values
     set hw_server [get_ini_config "connection.hw_server" "localhost"]
-    set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
-    set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
-    set startup_mode_addr [get_ini_config "registers.startup_mode_addr" "0xXXXX0008"]
+    set command_addr [get_ini_config "registers.command_addr" "0x10000000"]
+    set response_addr [get_ini_config "registers.response_addr" "0x10000004"]
+    set startup_mode_addr [get_ini_config "registers.startup_mode_addr" "0x10000008"]
     set log_file [get_ini_config "logging.log_file" "script_log.txt"]
     set timeout [get_ini_config "timing.timeout" "5000"]
     set retries [get_ini_config "timing.retries" "3"]
@@ -2632,8 +2694,8 @@ proc execute_script_command {command} {
     }
     
     # Fallback to legacy register-based communication
-    set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
-    set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
+    set command_addr [get_ini_config "registers.command_addr" "0x10000000"]
+    set response_addr [get_ini_config "registers.response_addr" "0x10000004"]
     set timeout [get_ini_config "timing.timeout" "5000"]
     
     # Parse command and execute

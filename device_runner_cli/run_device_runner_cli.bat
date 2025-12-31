@@ -13,16 +13,15 @@ rem :L
 
 echo Starting Device Runner CLI via XSDB...
 echo.
-echo Note: Update the -bit_file parameter to point to your actual bit file
-echo.
 
-start /b %XSDB_PATH%/xsdb device_runner_cli.tcl ^
-        -arch zynq ^
+%XSDB_PATH%\xsdb device_runner_cli.tcl ^
+        -arch zynqMP ^
         -mode user ^
         -hw_server localhost ^
         -ps_ref_clk 0 ^
         -term_app device_runner_term.bat ^
         -log_dir logs ^
-        -bit_file design.bit
+        -bit_file bin\kv260_design.bit ^
+        -fsbl_path bin\fsbl.elf
 
 
