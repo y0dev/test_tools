@@ -5,9 +5,17 @@
  * This header file contains all type definitions, structures, and enumerations
  * used throughout the JTAG UART Handler application.
  * 
- * @author Device Runner CLI
- * @version 2.0.0
- * @date 2024
+ * @author Devontae Reid    (devdoesit17@gmail.com)
+ * @version 1.1.0
+ * @date 2025-12-31
+ * @copyright Copyright (c) 2025 Devontae Reid
+ * @license MIT License
+ * @note This file is part of the Device Runner CLI project.
+ * @note This file is licensed under the MIT License.
+ * @note This file is part of the Device Runner CLI project.
+ * 
+ * History:
+ * 2025-12-31 - Initial version
  */
 
 #ifndef TYPES_H

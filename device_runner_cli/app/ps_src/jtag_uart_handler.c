@@ -25,9 +25,17 @@
  * - UART: Direct user input/output via JTAG UART
  * - Shared Memory: Command/response protocol at 0x10000000
  * 
- * @author Device Runner CLI
- * @version 2.0.0
- * @date 2024
+ * @author Devontae Reid    (devdoesit17@gmail.com)
+ * @version 1.1.0
+ * @date 2025-12-31
+ * @copyright Copyright (c) 2025 Devontae Reid
+ * @license MIT License
+ * @note This file is part of the Device Runner CLI project.
+ * @note This file is licensed under the MIT License.
+ * @note This file is part of the Device Runner CLI project.
+ * 
+ * History:
+ * 2025-12-31 - Initial version
  * 
  * @see types.h for data structure definitions
  * @see constants.h for constant and message type definitions
@@ -42,6 +50,7 @@
 #include "xil_io.h"
 
 /* Project header files */
+#include "jtag_uart_handler.h"
 #include "include/types.h"
 #include "include/constants.h"
 #include "display.h"
@@ -80,6 +89,68 @@ config_t config = {  /* Exported for display.c */
     .timeout_value = 5000,
     .debug_level = 1
 };
+
+/* ============================================================================
+ * Bit Manipulation Helper Functions
+ * ============================================================================ */
+
+/**
+ * @brief Check if a specific bit is set in a value
+ * 
+ * @param value The value to check
+ * @param bit_pos The bit position to check (0-31)
+ * @return 1 if bit is set, 0 if bit is clear
+ * 
+ * @example
+ *   check_bit(0x00000005, 0);  // Returns 1 (bit 0 is set)
+ *   check_bit(0x00000005, 1);  // Returns 0 (bit 1 is clear)
+ *   check_bit(0x00000005, 2);  // Returns 1 (bit 2 is set)
+ */
+int check_bit(uint32_t value, uint8_t bit_pos) {
+    if (bit_pos > 31) {
+        return 0;  // Invalid bit position
+    }
+    uint32_t mask = 1U << bit_pos;
+    return (value & mask) ? 1 : 0;
+}
+
+/**
+ * @brief Set a specific bit in a value
+ * 
+ * @param value The value to modify
+ * @param bit_pos The bit position to set (0-31)
+ * @return The value with the specified bit set
+ * 
+ * @example
+ *   set_bit(0x00000000, 0);  // Returns 0x00000001
+ *   set_bit(0x00000001, 2);  // Returns 0x00000005
+ */
+uint32_t set_bit(uint32_t value, uint8_t bit_pos) {
+    if (bit_pos > 31) {
+        return value;  // Invalid bit position, return unchanged
+    }
+    uint32_t mask = 1U << bit_pos;
+    return value | mask;
+}
+
+/**
+ * @brief Clear a specific bit in a value
+ * 
+ * @param value The value to modify
+ * @param bit_pos The bit position to clear (0-31)
+ * @return The value with the specified bit cleared
+ * 
+ * @example
+ *   clear_bit(0x00000005, 0);  // Returns 0x00000004
+ *   clear_bit(0x00000005, 2);  // Returns 0x00000001
+ */
+uint32_t clear_bit(uint32_t value, uint8_t bit_pos) {
+    if (bit_pos > 31) {
+        return value;  // Invalid bit position, return unchanged
+    }
+    uint32_t mask = 1U << bit_pos;
+    return value & ~mask;
+}
 
 /* ============================================================================
  * Function Prototypes - UI/Menu Functions
@@ -662,18 +733,21 @@ static uint32_t get_list_selection(const char *prompt, const char *options[], in
 static void handle_main_menu_selection(char choice) {
     switch (choice) {
         case '1':
+        {
             display_configuration();
             break;
+        }
             
-        case '2':
+        case '2': 
+        {
             show_config_menu();
-            {
-                char config_choice = get_char_input();
-                handle_config_menu_selection(config_choice);
-                    }
-                    break;
+            char config_choice = get_char_input();
+            handle_config_menu_selection(config_choice);
+            break;
+        }
                     
-                case '3':
+        case '3': 
+        {
             print_banner();
             xil_printf("=== RUNNING APPLICATION ===\r\n");
             xil_printf("Device: %s\r\n", config.device_name);
@@ -686,9 +760,11 @@ static void handle_main_menu_selection(char choice) {
             xil_printf("Application completed.\r\n");
             xil_printf("\r\nPress any key to continue...");
             get_char_input();
-                    break;
+            break;
+        }
                     
-                case '4':
+        case '4':
+        {
             print_banner();
             xil_printf("=== SYSTEM STATUS ===\r\n");
             xil_printf("Startup Mode: 0x%08X\r\n", startup_mode);
@@ -697,9 +773,11 @@ static void handle_main_menu_selection(char choice) {
             xil_printf("Menu Active: %s\r\n", menu_active ? "Yes" : "No");
             xil_printf("\r\nPress any key to continue...");
             get_char_input();
-                    break;
-                    
+            break;
+        }
+            
         case '5':
+        {
             print_banner();
             xil_printf("=== HELP ===\r\n");
             xil_printf("Main Menu Options:\r\n");
@@ -718,17 +796,31 @@ static void handle_main_menu_selection(char choice) {
             xil_printf("\r\nPress any key to continue...");
             get_char_input();
             break;
+        }
             
         case '0':
+        {
             print_banner();
             xil_printf("=== EXITING ===\r\n");
             xil_printf("Goodbye!\r\n");
+            
+            // Set the EXIT bit in the command register
+            Xil_Out32(CMD_REG_ADDR, set_bit(0, CMD_BIT_EXIT));
+            
+            // Wait for the response register to be set
+            while (Xil_In32(RESP_REG_ADDR) != 0) {
+                delay_us(100);
+            }
+            
             running = 0;
             break;
+        }
             
-        default:
+        default: 
+        {
             xil_printf("\a"); // beep for invalid choice
             break;
+        }
     }
 }
 
@@ -750,37 +842,47 @@ static void handle_main_menu_selection(char choice) {
  */
 static void handle_config_menu_selection(char choice) {
     switch (choice) {
-                case '1':
+        case '1': 
+        {
             update_device_name();
-                    break;
-                    
-                case '2':
+            break;
+        }
+        case '2': 
+        {
             update_base_address();
-                    break;
-                    
-                case '3':
+            break;
+        }
+        case '3': 
+        {
             update_operation_mode();
-                    break;
+            break;
+        }
                     
-        case '4':
+        case '4': 
+        {
             update_timeout_value();
-                    break;
-            
-        case '5':
+            break;
+        }
+        case '5': 
+        {
             update_debug_level();
             break;
-            
-        case '6':
+        }
+        case '6': 
+        {
             display_configuration();
             break;
-            
-        case '0':
+        }
+        case '0': 
+        {
             // Back to main menu - handled by caller
             break;
-            
-        default:
+        }
+        default: 
+        {
             xil_printf("\a"); // beep for invalid choice
             break;
+        }
     }
 }
 
@@ -1167,9 +1269,13 @@ int read_data_area(char *buffer, int max_len) {
 static int process_shared_memory_message(void) {
     uint32_t cmd_reg = Xil_In32(SHARED_MEM_BASE + CMD_REG_OFFSET);
     
-    // Check if any command bit is set
-    if (cmd_reg == 0) {
-        return 0; // No command
+    // Extract only the lower 16 bits (app commands)
+    // Upper 16 bits (bits 31-16) are reserved for TCL script commands
+    uint32_t app_cmd_reg = cmd_reg & 0x0000FFFF;
+    
+    // Check if any app command bit is set
+    if (app_cmd_reg == 0) {
+        return 0; // No app command
     }
     
     char data_buffer[1024];
@@ -1179,100 +1285,104 @@ static int process_shared_memory_message(void) {
     // Read data from data area if command requires it
     read_data_area(data_buffer, sizeof(data_buffer));
     
-    // Check which command bit is set and process accordingly
-    if (cmd_reg & (1 << 0)) {  // CMD_BIT_INIT
+    // Check which app command bit is set and process accordingly
+    if (check_bit(app_cmd_reg, CMD_BIT_APP_INIT)) {
         msg_type = MSG_TYPE_INIT;
         result = handle_shared_memory_init();
-    } else if (cmd_reg & (1 << 1)) {  // CMD_BIT_RUN_APP
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_RUN_APP)) {
         msg_type = MSG_TYPE_RUN_APP;
         result = handle_shared_memory_run_app();
-    } else if (cmd_reg & (1 << 2)) {  // CMD_BIT_SET_PARAM
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_SET_PARAM)) {
         msg_type = MSG_TYPE_SET_PARAM;
         result = handle_shared_memory_set_param(data_buffer);
-    } else if (cmd_reg & (1 << 3)) {  // CMD_BIT_GET_STATUS
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_GET_STATUS)) {
         msg_type = MSG_TYPE_GET_STATUS;
         char response[MAX_RESPONSE_LEN];
         result = handle_shared_memory_get_status(response, sizeof(response));
         if (result) {
             write_data_area(response);
             uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
-            Xil_Out32(resp_addr, RESP_SUCCESS);
+            Xil_Out32(resp_addr, set_bit(0, 0));  // Set RESP_SUCCESS (bit 0)
         }
-    } else if (cmd_reg & (1 << 4)) {  // CMD_BIT_CAPTURE_RAM
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_CAPTURE_RAM)) {
         msg_type = MSG_TYPE_CAPTURE_RAM;
         result = handle_shared_memory_capture_ram();
-    } else if (cmd_reg & (1 << 5)) {  // CMD_BIT_SET_CONFIG
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_SET_CONFIG)) {
         msg_type = MSG_TYPE_SET_CONFIG;
         result = handle_shared_memory_set_config(data_buffer);
-    } else if (cmd_reg & (1 << 6)) {  // CMD_BIT_GET_CONFIG
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_GET_CONFIG)) {
         msg_type = MSG_TYPE_GET_CONFIG;
         char response[MAX_RESPONSE_LEN];
         result = handle_shared_memory_get_config(data_buffer, response, sizeof(response));
         if (result) {
             write_data_area(response);
             uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
-            Xil_Out32(resp_addr, RESP_SUCCESS);
+            Xil_Out32(resp_addr, set_bit(0, 0));  // Set RESP_SUCCESS (bit 0)
         }
-    } else if (cmd_reg & (1 << 7)) {  // CMD_BIT_EXIT
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_EXIT)) {
         msg_type = MSG_TYPE_EXIT;
         result = handle_shared_memory_exit();
-    } else if (cmd_reg & (1 << 8)) {  // CMD_BIT_START_TEST
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_START_TEST)) {
         msg_type = MSG_TYPE_START_TEST;
         result = handle_shared_memory_start_test(data_buffer);
-    } else if (cmd_reg & (1 << 9)) {  // CMD_BIT_RUN_TEST
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_RUN_TEST)) {
         msg_type = MSG_TYPE_RUN_TEST;
         result = handle_shared_memory_run_test(data_buffer);
-    } else if (cmd_reg & (1 << 10)) {  // CMD_BIT_GET_TEST_STATUS
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_GET_TEST_STATUS)) {
         msg_type = MSG_TYPE_GET_TEST_STATUS;
         char response[MAX_RESPONSE_LEN];
         result = handle_shared_memory_get_test_status(response, sizeof(response));
         if (result) {
             write_data_area(response);
             uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
-            Xil_Out32(resp_addr, RESP_SUCCESS);
+            Xil_Out32(resp_addr, set_bit(0, 0));  // Set RESP_SUCCESS (bit 0)
         }
-    } else if (cmd_reg & (1 << 11)) {  // CMD_BIT_RESET_PROCESSOR
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_RESET_PROCESSOR)) {
         msg_type = MSG_TYPE_RESET_PROCESSOR;
         result = handle_shared_memory_reset_processor();
-    } else if (cmd_reg & (1 << 12)) {  // CMD_BIT_GET_BOOT_MODE
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_GET_BOOT_MODE)) {
         msg_type = MSG_TYPE_GET_BOOT_MODE;
         char response[MAX_RESPONSE_LEN];
         result = handle_shared_memory_get_boot_mode(response, sizeof(response));
         if (result) {
             write_data_area(response);
             uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
-            Xil_Out32(resp_addr, RESP_SUCCESS);
+            Xil_Out32(resp_addr, set_bit(0, 0));  // Set RESP_SUCCESS (bit 0)
         }
-    } else if (cmd_reg & (1 << 13)) {  // CMD_BIT_GET_DEVICE_DNA
+    } else if (check_bit(app_cmd_reg, CMD_BIT_APP_GET_DEVICE_DNA)) {
         msg_type = MSG_TYPE_GET_DEVICE_DNA;
         char response[MAX_RESPONSE_LEN];
         result = handle_shared_memory_get_device_dna(response, sizeof(response));
         if (result) {
             write_data_area(response);
             uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
-            Xil_Out32(resp_addr, RESP_SUCCESS);
+            Xil_Out32(resp_addr, set_bit(0, 0));  // Set RESP_SUCCESS (bit 0)
         }
     } else {
-        xil_printf("Unknown command bit in register: 0x%08X\r\n", cmd_reg);
+        xil_printf("Unknown app command bit in register: 0x%08X (lower 16 bits: 0x%04X)\r\n", cmd_reg, app_cmd_reg);
         uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
-        Xil_Out32(resp_addr, RESP_ERROR);
-        // Clear command register
-        Xil_Out32(SHARED_MEM_BASE + CMD_REG_OFFSET, 0);
+        Xil_Out32(resp_addr, set_bit(0, 1));  // Set RESP_ERROR (bit 1)
+        // Clear only the lower 16 bits (app commands) from command register
+        // Preserve upper 16 bits (TCL commands)
+        uint32_t tcl_cmd_reg = cmd_reg & 0xFFFF0000;
+        Xil_Out32(SHARED_MEM_BASE + CMD_REG_OFFSET, tcl_cmd_reg);
         return 1;
     }
     
-    xil_printf("Processing shared memory command: type=%u\r\n", msg_type);
+    xil_printf("Processing shared memory app command: type=%u\r\n", msg_type);
     
     // Set response register
     uint32_t resp_addr = SHARED_MEM_BASE + RESP_REG_OFFSET;
     if (result) {
-        Xil_Out32(resp_addr, RESP_SUCCESS);
+        Xil_Out32(resp_addr, set_bit(0, 0));  // Set RESP_SUCCESS (bit 0)
     } else {
-        Xil_Out32(resp_addr, RESP_ERROR);
+        Xil_Out32(resp_addr, set_bit(0, 1));  // Set RESP_ERROR (bit 1)
     }
     
-    // Clear command register after processing
-    Xil_Out32(SHARED_MEM_BASE + CMD_REG_OFFSET, 0);
+    // Clear only the lower 16 bits (app commands) from command register after processing
+    // Preserve upper 16 bits (TCL commands)
+    uint32_t tcl_cmd_reg = cmd_reg & 0xFFFF0000;
+    Xil_Out32(SHARED_MEM_BASE + CMD_REG_OFFSET, tcl_cmd_reg);
     
     return 1; // Message processed
 }
@@ -1286,7 +1396,7 @@ static int handle_shared_memory_init(void) {
     
     // Initialize configuration with defaults
     strcpy(config.device_name, "Default Device");
-    config.base_address = 0x43C00000;
+    config.base_address = DATA_AREA_ADDR;
     config.operation_mode = 1;
     config.timeout_value = 5000;
     config.debug_level = 1;

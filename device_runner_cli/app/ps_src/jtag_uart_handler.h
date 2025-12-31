@@ -4,9 +4,17 @@
  * This header file defines the command protocol between the Device Runner CLI
  * and the embedded JTAG UART handler running on the FPGA PS.
  * 
- * Author: Device Runner CLI
- * Version: 1.0.0
- * Date: 2024
+ * Author: Devontae Reid    (devdoesit17@gmail.com)
+ * Version: 1.1.0
+ * Date: 2025-12-31
+ * Copyright (c) 2025 Devontae Reid
+ * License: MIT License
+ * Note: This file is part of the Device Runner CLI project.
+ * Note: This file is licensed under the MIT License.
+ * Note: This file is part of the Device Runner CLI project.
+ * 
+ * History:
+ * 2025-12-31 - Initial version
  */
 
 #ifndef JTAG_UART_HANDLER_H

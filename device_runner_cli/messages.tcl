@@ -10,31 +10,70 @@ set ::message_timeout 5000
 set ::message_retries 3
 
 # Register offsets in shared memory
-set ::CMD_REG_OFFSET 0x0      ;# Command register (bit field)
-set ::RESP_REG_OFFSET 0x4     ;# Response register
-set ::DATA_AREA_OFFSET 0x8    ;# Data area for command parameters
+set ::STARTUP_MODE_REG_OFFSET 0x0      ;# Startup mode detection register offset in shared memory
+set ::CMD_REG_OFFSET 0x4               ;# Command register (bit field)
+set ::RESP_REG_OFFSET 0x8              ;# Response register
+set ::DATA_AREA_OFFSET 0x100           ;# Data area for command parameters
 
-# Command bit positions in command register
-set ::CMD_BIT_INIT 0          ;# Bit 0: INIT command
-set ::CMD_BIT_RUN_APP 1       ;# Bit 1: RUN_APP command
-set ::CMD_BIT_SET_PARAM 2     ;# Bit 2: SET_PARAM command
-set ::CMD_BIT_GET_STATUS 3    ;# Bit 3: GET_STATUS command
-set ::CMD_BIT_CAPTURE_RAM 4   ;# Bit 4: CAPTURE_RAM command
-set ::CMD_BIT_SET_CONFIG 5    ;# Bit 5: SET_CONFIG command
-set ::CMD_BIT_GET_CONFIG 6    ;# Bit 6: GET_CONFIG command
-set ::CMD_BIT_EXIT 7          ;# Bit 7: EXIT command
-set ::CMD_BIT_START_TEST 8    ;# Bit 8: START_TEST command
-set ::CMD_BIT_RUN_TEST 9      ;# Bit 9: RUN_TEST command
-set ::CMD_BIT_GET_TEST_STATUS 10 ;# Bit 10: GET_TEST_STATUS command
-set ::CMD_BIT_RESET_PROCESSOR 11 ;# Bit 11: RESET_PROCESSOR command
-set ::CMD_BIT_GET_BOOT_MODE 12 ;# Bit 12: GET_BOOT_MODE command
-set ::CMD_BIT_GET_DEVICE_DNA 13 ;# Bit 13: GET_DEVICE_DNA command
+# Startup mode enumeration values
+# Defines different startup modes for the application based on how it's launched
+set ::MODE_JTAG_INTERACTIVE 0x00000001  ;# Interactive mode via JTAG UART
+set ::MODE_JTAG_SCRIPT      0x00000002  ;# Script mode via JTAG UART
+set ::MODE_UART_INTERACTIVE 0x00000003  ;# Interactive mode via UART
+set ::MODE_UART_SCRIPT      0x00000004  ;# Script mode via UART
 
-# Response register values
-set ::RESP_SUCCESS 0x00000001  ;# Success response
-set ::RESP_ERROR 0x00000002    ;# Error response
-set ::RESP_BUSY 0x00000004     ;# Busy response
-set ::RESP_READY 0x00000008    ;# Ready response
+# Application operation modes
+set ::MODE_INTERACTIVE 0    ;# Interactive menu-driven mode
+set ::MODE_BACKGROUND  1    ;# Background command processing mode
+
+# App Command Bit Positions (Lower 16 bits: 0-15)
+# These match the C constants in constants.h
+set ::CMD_BIT_APP_INIT            0   ;# Bit 0:  App INIT command
+set ::CMD_BIT_APP_RUN_APP         1   ;# Bit 1:  App RUN_APP command
+set ::CMD_BIT_APP_SET_PARAM       2   ;# Bit 2:  App SET_PARAM command
+set ::CMD_BIT_APP_GET_STATUS      3   ;# Bit 3:  App GET_STATUS command
+set ::CMD_BIT_APP_CAPTURE_RAM     4   ;# Bit 4:  App CAPTURE_RAM command
+set ::CMD_BIT_APP_SET_CONFIG      5   ;# Bit 5:  App SET_CONFIG command
+set ::CMD_BIT_APP_GET_CONFIG      6   ;# Bit 6:  App GET_CONFIG command
+set ::CMD_BIT_APP_EXIT            7   ;# Bit 7:  App EXIT command
+set ::CMD_BIT_APP_START_TEST      8   ;# Bit 8:  App START_TEST command
+set ::CMD_BIT_APP_RUN_TEST        9   ;# Bit 9:  App RUN_TEST command
+set ::CMD_BIT_APP_GET_TEST_STATUS 10  ;# Bit 10: App GET_TEST_STATUS command
+set ::CMD_BIT_APP_RESET_PROCESSOR 11  ;# Bit 11: App RESET_PROCESSOR command
+set ::CMD_BIT_APP_GET_BOOT_MODE   12  ;# Bit 12: App GET_BOOT_MODE command
+set ::CMD_BIT_APP_GET_DEVICE_DNA  13  ;# Bit 13: App GET_DEVICE_DNA command
+
+# Command register bit field layout:
+# - Upper 16 bits (bits 31-16): TCL script commands
+# - Lower 16 bits (bits 15-0):  App/C application commands
+
+# TCL Script Command bit positions (Upper 16 bits: 16-31)
+set ::CMD_BIT_INIT 16          ;# Bit 16: TCL INIT command
+set ::CMD_BIT_RUN_APP 17       ;# Bit 17: TCL RUN_APP command
+set ::CMD_BIT_SET_PARAM 18     ;# Bit 18: TCL SET_PARAM command
+set ::CMD_BIT_GET_STATUS 19    ;# Bit 19: TCL GET_STATUS command
+set ::CMD_BIT_CAPTURE_RAM 20   ;# Bit 20: TCL CAPTURE_RAM command
+set ::CMD_BIT_SET_CONFIG 21    ;# Bit 21: TCL SET_CONFIG command
+set ::CMD_BIT_GET_CONFIG 22    ;# Bit 22: TCL GET_CONFIG command
+set ::CMD_BIT_EXIT 23          ;# Bit 23: TCL EXIT command
+set ::CMD_BIT_START_TEST 24    ;# Bit 24: TCL START_TEST command
+set ::CMD_BIT_RUN_TEST 25      ;# Bit 25: TCL RUN_TEST command
+set ::CMD_BIT_GET_TEST_STATUS 26 ;# Bit 26: TCL GET_TEST_STATUS command
+set ::CMD_BIT_RESET_PROCESSOR 27 ;# Bit 27: TCL RESET_PROCESSOR command
+set ::CMD_BIT_GET_BOOT_MODE 28 ;# Bit 28: TCL GET_BOOT_MODE command
+set ::CMD_BIT_GET_DEVICE_DNA 29 ;# Bit 29: TCL GET_DEVICE_DNA command
+
+# Response register values (bit masks)
+set ::RESP_SUCCESS 0x00000001  ;# Success response mask
+set ::RESP_ERROR 0x00000002    ;# Error response mask
+set ::RESP_BUSY 0x00000004     ;# Busy response mask
+set ::RESP_READY 0x00000008    ;# Ready response mask
+
+# Response register bit positions
+set ::RESP_BIT_SUCCESS 0      ;# Bit 0: Success response
+set ::RESP_BIT_ERROR   1      ;# Bit 1: Error response
+set ::RESP_BIT_BUSY    2      ;# Bit 2: Busy response
+set ::RESP_BIT_READY   3      ;# Bit 3: Ready response
 
 # Configuration parameter types
 set ::CONFIG_TYPE_STRING 1
@@ -179,18 +218,38 @@ proc send_message {msg_type data {timeout 5000} {retries 3}} {
         write_data_area $data
     }
     
-    # Set the appropriate bit in command register
+    # Set the appropriate bit in command register (upper 16 bits for TCL commands)
+    # Preserve the lower 16 bits (app commands) when writing
     set cmd_reg_addr [expr $shared_mem_base + $CMD_REG_OFFSET]
-    set cmd_value [expr 1 << $bit_pos]
+    set current_cmd_reg [mrd $cmd_reg_addr]
+    # Extract hex value from mrd output (format: "address:   value")
+    if {[regexp {:\s+([0-9a-fA-F]+)} $current_cmd_reg match current_value_hex]} {
+        set current_cmd_value 0x$current_value_hex
+    } else {
+        set current_cmd_value 0
+    }
+    # Preserve lower 16 bits (app commands) and set upper 16 bits (TCL commands)
+    set app_cmd_bits [expr {$current_cmd_value & 0x0000FFFF}]
+    set tcl_cmd_value [expr {1 << $bit_pos}]
+    set cmd_value [expr {$app_cmd_bits | $tcl_cmd_value}]
     mwr $cmd_reg_addr $cmd_value
     
-    log_message "Command bit $bit_pos set in command register: 0x[format %08X $cmd_value]"
+    log_message "TCL command bit $bit_pos set in command register: 0x[format %08X $cmd_value] (preserved app bits: 0x[format %04X $app_cmd_bits])"
     
     # Wait for response
     set response [wait_for_message_response $timeout $retries]
     
-    # Clear command register after processing
-    mwr $cmd_reg_addr 0
+    # Clear only the upper 16 bits (TCL commands) from command register after processing
+    # Preserve lower 16 bits (app commands)
+    set current_cmd_reg [mrd $cmd_reg_addr]
+    if {[regexp {:\s+([0-9a-fA-F]+)} $current_cmd_reg match current_value_hex]} {
+        set current_cmd_value 0x$current_value_hex
+    } else {
+        set current_cmd_value 0
+    }
+    # Clear upper 16 bits, preserve lower 16 bits
+    set app_cmd_bits [expr {$current_cmd_value & 0x0000FFFF}]
+    mwr $cmd_reg_addr $app_cmd_bits
     
     return $response
 }

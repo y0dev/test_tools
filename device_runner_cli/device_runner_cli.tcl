@@ -606,7 +606,6 @@ if {[file exists "messages.tcl"]} {
 proc conn_device {hw_server_host {bit_file_path ""}} {
     global log_file
     
-    
     log_message "Connecting to device: $hw_server_host"
     puts "\n\nConnecting to device  : $hw_server_host"
 
@@ -616,66 +615,130 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     puts "Step 1: Connecting to hardware server..."
     puts "Using remote connection to $hw_server_host:3121"
     log_message "Using remote connection to $hw_server_host:3121"
-    while {[catch {connect -host $hw_server_host -port 3121}]} {
+    
+    set connect_attempts 0
+    set max_connect_attempts 30  ;# Maximum 60 seconds (30 attempts * 2 seconds)
+    while {[catch {connect -host $hw_server_host -port 3121} err]} {
+        incr connect_attempts
+        if {$connect_attempts >= $max_connect_attempts} {
+            set error_msg "Failed to connect to hardware server after $max_connect_attempts attempts: $err"
+            puts "ERROR: $error_msg"
+            log_message "ERROR: $error_msg"
+            return 1
+        }
         puts -nonewline "."
         flush stdout
         after 2000
     }
-    # bpremove -all
+    puts ""
+    puts "Successfully connected to hardware server"
+    log_message "Successfully connected to hardware server"
     
     # Step 2: List available targets
     puts "Step 2: Listing available targets..."
-    targets -set -nocase -filter {name =~"PSU*"}
-
-    # Updating the boot mode
-    # targets -set -nocase -filter {name =~ "*PSU*"}
-    # stop
-    # mwr 0xff5e0200 0x0100
-    
+    if {[catch {targets -set -nocase -filter {name =~"PSU*"}} err]} {
+        set error_msg "Failed to set PSU target: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     
     # Step 3: Reset all cores
     puts "Step 3: Resetting PSU..."
-    rst -system
+    if {[catch {rst -system} err]} {
+        set error_msg "Failed to reset PSU: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     after 1000
 
     puts "Step 4: Finding APU target..."
-    targets -set -nocase -filter {name =~ "*APU*"}
+    if {[catch {targets -set -nocase -filter {name =~ "*APU*"}} err]} {
+        set error_msg "Failed to set APU target: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
 
     # Step 5: Resetting APU
     puts "Step 5: Resetting APU..."
-    rst -system
+    if {[catch {rst -system} err]} {
+        set error_msg "Failed to reset APU: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     after 1000
 
     # Step 6: Loading hardware platform
     puts "Step 6: Loading hardware platform..."
-    loadhw -hw F:/Software/Embedded/00_Workspace/vitis/hello_world/platform/export/platform/hw/kv260_example.xsa
-    configparams force-mem-access 1
+    set hw_platform_path "F:/Software/Embedded/00_Workspace/vitis/hello_world/platform/export/platform/hw/kv260_example.xsa"
+    if {[catch {loadhw -hw $hw_platform_path} err]} {
+        set error_msg "Failed to load hardware platform ($hw_platform_path): $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        # Continue as this might be optional depending on configuration
+    } else {
+        log_message "Hardware platform loaded successfully"
+    }
+    
+    if {[catch {configparams force-mem-access 1} err]} {
+        set warning_msg "Warning: Failed to set force-mem-access: $err"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+        # Continue as this is not critical
+    }
     
     # Step 7: Program FPGA with bit file
     puts "Step 7: Programming FPGA..."
     if {$bit_file_path != ""} {
         if {[file exists $bit_file_path]} {
             puts "Programming FPGA with: $bit_file_path"
-            fpga -f $bit_file_path
+            if {[catch {fpga -f $bit_file_path} err]} {
+                set error_msg "Failed to program FPGA with bit file ($bit_file_path): $err"
+                puts "ERROR: $error_msg"
+                log_message "ERROR: $error_msg"
+                return 1
+            }
             puts "FPGA programming completed"
+            log_message "FPGA programming completed successfully"
         } else {
-            puts "Warning: Bit file not found: $bit_file_path"
+            set warning_msg "Bit file not found: $bit_file_path"
+            puts "Warning: $warning_msg"
+            log_message "WARNING: $warning_msg"
         }
     } else {
         puts "Warning: No bit file specified for FPGA programming"
+        log_message "Warning: No bit file specified for FPGA programming"
     }
 
     # Step 8: Disabling debug firewall
     puts "Step 8: Disabling debug firewall..."
-    configparams force-mem-access 1
+    if {[catch {configparams force-mem-access 1} err]} {
+        set warning_msg "Warning: Failed to disable debug firewall: $err"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+        # Continue as this is not critical
+    }
     
     # Step 9: Connect to target a53_0
     puts "Step 9: Connecting to target a53_0..."
-    targets -set -nocase -filter {name =~ "*a53*#0"}
+    if {[catch {targets -set -nocase -filter {name =~ "*a53*#0"}} err]} {
+        set error_msg "Failed to connect to A53 target: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     
     # Step 10: Verify target is ready and reset processor
     puts "Step 10: Resetting processor..."
-    rst -processor
+    if {[catch {rst -processor} err]} {
+        set error_msg "Failed to reset processor: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     after 1000
 
     # Step 11: Download FSBL (if path is provided)
@@ -683,16 +746,39 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     if {[info exists ::fsbl_path] && $::fsbl_path != ""} {
         if {[file exists $::fsbl_path]} {
             puts "Downloading FSBL from: $::fsbl_path"
-            dow $::fsbl_path
-            set bp_fsbl_exit [bpadd -addr &XFsbl_Exit]
-            con -block -timeout 60
-            bpremove $bp_fsbl_exit
+            if {[catch {dow $::fsbl_path} err]} {
+                set error_msg "Failed to download FSBL ($::fsbl_path): $err"
+                puts "ERROR: $error_msg"
+                log_message "ERROR: $error_msg"
+                return 1
+            }
+            
+            if {[catch {set bp_fsbl_exit [bpadd -addr &XFsbl_Exit]} err]} {
+                set warning_msg "Warning: Failed to set FSBL exit breakpoint: $err"
+                puts "WARNING: $warning_msg"
+                log_message "WARNING: $warning_msg"
+            } else {
+                if {[catch {con -block -timeout 60} err]} {
+                    set error_msg "Failed to continue FSBL execution: $err"
+                    puts "ERROR: $error_msg"
+                    log_message "ERROR: $error_msg"
+                }
+                if {[catch {bpremove $bp_fsbl_exit} err]} {
+                    set warning_msg "Warning: Failed to remove FSBL breakpoint: $err"
+                    puts "WARNING: $warning_msg"
+                    log_message "WARNING: $warning_msg"
+                }
+            }
+            log_message "FSBL downloaded and executed successfully"
         } else {
-            puts "Warning: FSBL file not found: $::fsbl_path"
+            set warning_msg "FSBL file not found: $::fsbl_path"
+            puts "Warning: $warning_msg"
             puts "Skipping FSBL download"
+            log_message "WARNING: $warning_msg"
         }
     } else {
         puts "Info: FSBL path not provided, skipping FSBL download"
+        log_message "Info: FSBL path not provided, skipping FSBL download"
     }
     
 
@@ -718,28 +804,65 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         puts "Step 12: Microblaze enabled - Setting up MDM and downloading Microblaze app..."
         
         # Setup MDM
-        configparams mdm-detect-bscan-mask 2
+        if {[catch {configparams mdm-detect-bscan-mask 2} err]} {
+            set warning_msg "Warning: Failed to set MDM bscan mask: $err"
+            puts "WARNING: $warning_msg"
+            log_message "WARNING: $warning_msg"
+        }
 
         # Reset Microblaze
-        targets -set -nocase -filter {name =~ "*microblaze*#0" && bscan=="USER2" } 
-
-        # Download Microblaze App
-        if {[info exists mb_elf] && $mb_elf != ""} {
-            dow $mb_elf
-            after 1000
-            con
+        if {[catch {targets -set -nocase -filter {name =~ "*microblaze*#0" && bscan=="USER2"}} err]} {
+            set warning_msg "Warning: Failed to set Microblaze target: $err"
+            puts "WARNING: $warning_msg"
+            log_message "WARNING: $warning_msg"
         } else {
-            puts "Warning: Microblaze enabled but mb_elf not defined"
+            # Download Microblaze App
+            if {[info exists mb_elf] && $mb_elf != ""} {
+                if {[catch {dow $mb_elf} err]} {
+                    set error_msg "Failed to download Microblaze app ($mb_elf): $err"
+                    puts "ERROR: $error_msg"
+                    log_message "ERROR: $error_msg"
+                    return 1
+                }
+                after 1000
+                if {[catch {con} err]} {
+                    set warning_msg "Warning: Failed to continue Microblaze execution: $err"
+                    puts "WARNING: $warning_msg"
+                    log_message "WARNING: $warning_msg"
+                }
+                log_message "Microblaze app downloaded and started successfully"
+            } else {
+                set warning_msg "Microblaze enabled but mb_elf not defined"
+                puts "Warning: $warning_msg"
+                log_message "WARNING: $warning_msg"
+            }
         }
     } else {
         puts "Step 12: Microblaze disabled - Skipping Microblaze setup"
+        log_message "Step 12: Microblaze disabled - Skipping Microblaze setup"
     }
 
     # Step 13: Final A53 connection and reset
     puts "Step 13: Final A53 connection and reset..."
-    targets -set -nocase -filter {name =~ "*a53*#0"}
-    rst -processor
+    if {[catch {targets -set -nocase -filter {name =~ "*a53*#0"}} err]} {
+        set error_msg "Failed to set final A53 target: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
+    
+    if {[catch {rst -processor} err]} {
+        set error_msg "Failed to reset processor (final step): $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     after 1000
+    
+    puts "Device connection and initialization completed successfully"
+    log_message "Device connection and initialization completed successfully"
+    
+    return 0
 }
 
 
@@ -792,6 +915,140 @@ proc show_help {} {
 }
 
 #--------------------------------------------------------------------
+# Bit manipulation helper functions
+#--------------------------------------------------------------------
+
+#--------------------------------------------------------------------
+# @brief Check if a specific bit is set in a value
+# 
+# @param value The value to check (hex or decimal)
+# @param bit_pos The bit position to check (0-31)
+# @return 1 if bit is set, 0 if bit is clear
+# 
+# @example
+#   check_bit 0x00000005 0  ;# Returns 1 (bit 0 is set)
+#   check_bit 0x00000005 1  ;# Returns 0 (bit 1 is clear)
+#   check_bit 0x00000005 2  ;# Returns 1 (bit 2 is set)
+#--------------------------------------------------------------------
+proc check_bit {value bit_pos} {
+    set mask [expr {1 << $bit_pos}]
+    set result [expr {($value & $mask) != 0}]
+    return $result
+}
+
+#--------------------------------------------------------------------
+# @brief Set a specific bit in a value
+# 
+# @param value The value to modify (hex or decimal)
+# @param bit_pos The bit position to set (0-31)
+# @return The value with the specified bit set
+# 
+# @example
+#   set_bit 0x00000000 0  ;# Returns 0x00000001
+#   set_bit 0x00000001 2  ;# Returns 0x00000005
+#--------------------------------------------------------------------
+proc set_bit {value bit_pos} {
+    set mask [expr {1 << $bit_pos}]
+    set result [expr {$value | $mask}]
+    return $result
+}
+
+#--------------------------------------------------------------------
+# @brief Clear a specific bit in a value
+# 
+# @param value The value to modify (hex or decimal)
+# @param bit_pos The bit position to clear (0-31)
+# @return The value with the specified bit cleared
+# 
+# @example
+#   clear_bit 0x00000005 0  ;# Returns 0x00000004
+#   clear_bit 0x00000005 2  ;# Returns 0x00000001
+#--------------------------------------------------------------------
+proc clear_bit {value bit_pos} {
+    set mask [expr {1 << $bit_pos}]
+    set result [expr {$value & ~$mask}]
+    return $result
+}
+
+#--------------------------------------------------------------------
+# @brief Download application ELF and initialize shared memory communication
+# 
+# Downloads the application ELF file to the target processor, removes all
+# breakpoints, initializes shared memory communication, and sets the startup
+# mode register to indicate the current operation mode.
+# 
+# @param app_elf Path to the application ELF file to download
+# @param startup_mode Startup mode constant (e.g., MODE_JTAG_INTERACTIVE, MODE_JTAG_SCRIPT)
+# @param set_target Optional: If true, explicitly sets the A53 target before download (default: false)
+# @return 1 on success, 0 on error
+# 
+# @example
+#   if {![download_app_and_init_shared_memory "bin/jtag_app.elf" $::MODE_JTAG_INTERACTIVE]} {
+#       puts "ERROR: Failed to download and initialize application"
+#       return
+#   }
+#--------------------------------------------------------------------
+proc download_app_and_init_shared_memory {app_elf startup_mode {set_target false}} {
+    set error_occurred 0
+    set error_message ""
+    
+    # Set target if requested
+    if {$set_target} {
+        if {[catch {targets -set -nocase -filter {name =~ "*a53*#0"}} err]} {
+            set error_occurred 1
+            set error_message "Failed to set A53 target: $err"
+            puts "ERROR: $error_message"
+            log_message "ERROR: $error_message"
+            return 0
+        }
+    }
+    
+    # Download the application ELF file
+    puts "Downloading Device Application .elf file ($app_elf)"
+    if {[catch {dow $app_elf} err]} {
+        set error_occurred 1
+        set error_message "Failed to download application ELF file ($app_elf): $err"
+        puts "ERROR: $error_message"
+        log_message "ERROR: $error_message"
+        return 0
+    }
+    
+    # Remove all breakpoints
+    if {[catch {bpremove -all} err]} {
+        set error_message "Warning: Failed to remove breakpoints: $err"
+        puts "WARNING: $error_message"
+        log_message "WARNING: $error_message"
+        # Continue execution as this is not critical
+    }
+    
+    after 1000
+    
+    # Initialize shared memory communication
+    puts "Initializing shared memory communication..."
+    if {[catch {init_shared_memory} err]} {
+        set error_occurred 1
+        set error_message "Failed to initialize shared memory: $err"
+        puts "ERROR: $error_message"
+        log_message "ERROR: $error_message"
+        return 0
+    }
+    
+    # Set the startup mode register
+    if {[catch {mwr [expr $::shared_mem_base + $::STARTUP_MODE_REG_OFFSET] $startup_mode} err]} {
+        set error_occurred 1
+        set error_message "Failed to set startup mode register: $err"
+        puts "ERROR: $error_message"
+        log_message "ERROR: $error_message"
+        return 0
+    }
+    
+    puts "Shared memory communication ready"
+    log_message "Application downloaded and shared memory initialized successfully (mode: $startup_mode)"
+    
+    return 1
+}
+
+#--------------------------------------------------------------------
 # This function polls the response register in a loop to keep the tcp socket alive
 #
 #--------------------------------------------------------------------
@@ -807,7 +1064,40 @@ proc poll_response_register {} {
         set resp_reg_addr [expr $::shared_mem_base + $::RESP_REG_OFFSET]
         set running 1
         
+        set cmd_reg_addr [expr $::shared_mem_base + $::CMD_REG_OFFSET]
+        
         while {$running} {
+            # Check command register for app commands (lower 16 bits)
+            # App can set EXIT bit to signal it wants to exit
+            set cmd_reg_str [mrd $cmd_reg_addr]
+            if {[regexp {:\s+([0-9a-fA-F]+)} $cmd_reg_str match cmd_reg_hex]} {
+                set cmd_reg_value 0x$cmd_reg_hex
+            } else {
+                set cmd_reg_hex [lindex [split $cmd_reg_str ":"] end]
+                set cmd_reg_hex [string trim $cmd_reg_hex]
+                set cmd_reg_value 0x$cmd_reg_hex
+            }
+            
+            # Extract only the lower 16 bits (app commands)
+            set app_cmd_reg [expr {$cmd_reg_value & 0x0000FFFF}]
+            
+            # Check if app set EXIT command (CMD_BIT_APP_EXIT = bit 7)
+            if {[check_bit $app_cmd_reg $::CMD_BIT_APP_EXIT]} {
+                puts "App EXIT command detected in command register"
+                log_message "App EXIT command detected - Application requested exit"
+                
+                # Clear the app EXIT bit (preserve upper 16 bits for TCL commands)
+                set tcl_cmd_reg [expr {$cmd_reg_value & 0xFFFF0000}]
+                mwr $cmd_reg_addr $tcl_cmd_reg
+                
+                # Set success response to acknowledge exit
+                mwr $resp_reg_addr [set_bit 0 $::RESP_BIT_SUCCESS]
+                
+                set running 0
+                puts "Stopping poll_response_register loop due to app EXIT command..."
+                break
+            }
+            
             # Check response register
             set resp_value_str [mrd $resp_reg_addr]
             
@@ -823,7 +1113,8 @@ proc poll_response_register {} {
             }
             
             # Check for EXIT response or termination condition
-            if {[expr {$resp_value & $::RESP_ERROR}]} {
+            # Use response bit position constants from messages.tcl
+            if {[check_bit $resp_value $::RESP_BIT_ERROR]} {
                 # Error response - read error data
                 set error_data [read_data_area 1024]
                 puts "Error response: '$error_data'"
@@ -832,7 +1123,7 @@ proc poll_response_register {} {
                 mwr $resp_reg_addr 0
                 # Optionally exit on error
                 # set running 0
-            } elseif {[expr {$resp_value & $::RESP_SUCCESS}]} {
+            } elseif {[check_bit $resp_value $::RESP_BIT_SUCCESS]} {
                 # Success response - read data if available
                 set response_data [read_data_area 1024]
                 if {[string match "*EXIT*" $response_data] || [string match "*exit*" $response_data]} {
@@ -871,7 +1162,11 @@ proc poll_response_register {} {
 #--------------------------------------------------------------------
 proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
     # Connect to device, reset cores and connect to target a53_0
-    conn_device $hw_server $::bit_file
+    if {[conn_device $hw_server $::bit_file]} {
+        puts "ERROR: Failed to connect to device"
+        log_message "ERROR: Failed to connect to device - aborting operation"
+        return 1
+    }
 
     # Get the tcp port number to communicate with device via uart/jtag
     set tcp_port_num [jtagterminal -socket]
@@ -884,19 +1179,18 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         
         exec $term_app localhost $tcp_port_num &
         if {$boot_mode == "jtag"} {
-            puts "Downloading Device Application .elf file ($app_elf)"
-            dow $app_elf
-            
-            bpremove -all
-            after 1000
-
-            # Clear registers
-            puts "Initializing shared memory communication..."
-            init_shared_memory
-            puts "Shared memory communication ready"
+            if {![download_app_and_init_shared_memory $app_elf $::MODE_JTAG_INTERACTIVE]} {
+                puts "ERROR: Failed to download application and initialize shared memory"
+                log_message "ERROR: Failed to download application and initialize shared memory in interactive mode"
+                return 1
+            }
 
             puts "Place A53_0 into execution state..."
-            con
+            if {[catch {con} err]} {
+                puts "ERROR: Failed to continue execution: $err"
+                log_message "ERROR: Failed to continue execution: $err"
+                return 1
+            }
 
         }
 
@@ -910,13 +1204,18 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         run_script_mode_from_ini $::script_config_file
         
         if {$boot_mode == "jtag"} {
-            # Ensure A53 target is selected before download
-            targets -set -nocase -filter {name =~ "*a53*#0"}
-            puts "Downloading Device Application .elf file ($app_elf)"
-            dow $app_elf
+            if {![download_app_and_init_shared_memory $app_elf $::MODE_JTAG_SCRIPT true]} {
+                puts "ERROR: Failed to download application and initialize shared memory"
+                log_message "ERROR: Failed to download application and initialize shared memory in script mode"
+                return 1
+            }
         }
         puts "Place A53_0 into execution state..."
-        con
+        if {[catch {con} err]} {
+            puts "ERROR: Failed to continue execution: $err"
+            log_message "ERROR: Failed to continue execution: $err"
+            return 1
+        }
         
         # Poll response register in a loop to keep the tcp socket alive
         poll_response_register
