@@ -471,7 +471,7 @@ proc device_command {command} {
     global log_file
     
     # Default command register address
-    set command_addr 0xXXXX0000
+    set command_addr 0x10000000
     
     # Log the command
     log_message "Device Command: $command"
@@ -534,7 +534,7 @@ proc device_response {command {timeout 5000}} {
     global log_file
     
     # Default response register address
-    set response_addr 0xXXXX0004
+    set response_addr 0x10000004
     
     # Log the response request
     log_message "Requesting device response for: $command"
@@ -621,6 +621,7 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         flush stdout
         after 2000
     }
+    # bpremove -all
     
     # Step 2: List available targets
     puts "Step 2: Listing available targets..."
@@ -637,33 +638,21 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     rst -system
     after 1000
 
-    # Step 4: Find and Reset APU (only for JTAG boot mode)
-    if {$::boot_mode == "jtsag"} {
-        puts "Step 4a: Finding A53 target (JTAG mode)..."
-        targets -set -nocase -filter {name =~ "*A53*#0"}
-        puts "Step 4b: Resetting A53..."
-        rst -processor
-        after 1000
-    } else {
-        puts "Step 4a: Finding APU target..."
-        targets -set -nocase -filter {name =~ "*APU*"}
-        puts "Step 4b: Resetting APU..."
-        rst -system
-        after 1000
-    }
-    
-    # Step 4: Initialize PSU
-    #puts "Step 4: Initializing PSU..."
-    source lib/psu_init.tcl
-    #psu_init
-    #after 1000
-    #psu_ps_pl_reset_config
+    puts "Step 4: Finding APU target..."
+    targets -set -nocase -filter {name =~ "*APU*"}
 
+    # Step 5: Resetting APU
+    puts "Step 5: Resetting APU..."
+    rst -system
+    after 1000
+
+    # Step 6: Loading hardware platform
+    puts "Step 6: Loading hardware platform..."
     loadhw -hw F:/Software/Embedded/00_Workspace/vitis/hello_world/platform/export/platform/hw/kv260_example.xsa
     configparams force-mem-access 1
     
-    # Step 5: Program FPGA with bit file
-    puts "Step 5: Programming FPGA..."
+    # Step 7: Program FPGA with bit file
+    puts "Step 7: Programming FPGA..."
     if {$bit_file_path != ""} {
         if {[file exists $bit_file_path]} {
             puts "Programming FPGA with: $bit_file_path"
@@ -676,25 +665,28 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         puts "Warning: No bit file specified for FPGA programming"
     }
 
-    # Step 6: Disabling debug firewall
+    # Step 8: Disabling debug firewall
+    puts "Step 8: Disabling debug firewall..."
     configparams force-mem-access 1
     
-    # Step 7: Connect to target a53_0
-    puts "Step 7: Connecting to target a53_0..."
+    # Step 9: Connect to target a53_0
+    puts "Step 9: Connecting to target a53_0..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
     
-    # Step 8: Verify target is ready
+    # Step 10: Verify target is ready and reset processor
+    puts "Step 10: Resetting processor..."
     rst -processor
     after 1000
 
-    # Download FSBL (if path is provided)
+    # Step 11: Download FSBL (if path is provided)
+    puts "Step 11: Checking for FSBL..."
     if {[info exists ::fsbl_path] && $::fsbl_path != ""} {
         if {[file exists $::fsbl_path]} {
             puts "Downloading FSBL from: $::fsbl_path"
             dow $::fsbl_path
-            set bp_47_40_fsbl_bp [bpadd -addr &XFsbl_Exit]
+            set bp_fsbl_exit [bpadd -addr &XFsbl_Exit]
             con -block -timeout 60
-            bpremove $bp_47_40_fsbl_bp
+            bpremove $bp_fsbl_exit
         } else {
             puts "Warning: FSBL file not found: $::fsbl_path"
             puts "Skipping FSBL download"
@@ -721,9 +713,9 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         set microblaze_enabled 0
     }
     
-    # Setup MDM and Microblaze only if enabled
+    # Step 12: Setup MDM and Microblaze only if enabled
     if {$microblaze_enabled} {
-        puts "Microblaze enabled - Setting up MDM and downloading Microblaze app..."
+        puts "Step 12: Microblaze enabled - Setting up MDM and downloading Microblaze app..."
         
         # Setup MDM
         configparams mdm-detect-bscan-mask 2
@@ -740,14 +732,12 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
             puts "Warning: Microblaze enabled but mb_elf not defined"
         }
     } else {
-        puts "Microblaze disabled - Skipping Microblaze setup"
+        puts "Step 12: Microblaze disabled - Skipping Microblaze setup"
     }
 
-    # Reset A53
-    puts "Step 9: Connecting to target a53_0..."
+    # Step 13: Final A53 connection and reset
+    puts "Step 13: Final A53 connection and reset..."
     targets -set -nocase -filter {name =~ "*a53*#0"}
-
-    # Verify target is ready
     rst -processor
     after 1000
 }
@@ -785,9 +775,9 @@ proc show_help {} {
     puts "  [connection]"
     puts "  hw_server=localhost"
     puts "  [registers]"
-    puts "  command_addr=0xXXXX0000"
-    puts "  response_addr=0xXXXX0004"
-    puts "  startup_mode_addr=0xXXXX0008"
+    puts "  command_addr=0x10000000"
+    puts "  response_addr=0x10000004"
+    puts "  startup_mode_addr=0x10000008"
     puts "  [commands]"
     puts "  cmd1=init"
     puts "  cmd2=run_app"
@@ -808,17 +798,32 @@ proc show_help {} {
 #
 #--------------------------------------------------------------------
 proc poll_response_register {} {
+    puts "Entering poll_response_register - Starting response polling loop..."
+    log_message "Entering poll_response_register"
+    
     # Poll response register in a loop to keep the tcp socket alive
     if {[info exists ::shared_mem_base]} {
+        puts "Shared memory available - Polling response register at 0x[format %08X [expr $::shared_mem_base + $::RESP_REG_OFFSET]]"
         set resp_reg_addr [expr $::shared_mem_base + $::RESP_REG_OFFSET]
         set running 1
         
         while {$running} {
             # Check response register
-            set resp_value [mrd $resp_reg_addr]
+            set resp_value_str [mrd $resp_reg_addr]
+            
+            # Extract hex value from mrd output (format: "address:   value")
+            # Remove address part and whitespace, keep only the hex value
+            if {[regexp {:\s+([0-9a-fA-F]+)} $resp_value_str match resp_value_hex]} {
+                set resp_value 0x$resp_value_hex
+            } else {
+                # Fallback: try to extract last word if regex fails
+                set resp_value_hex [lindex [split $resp_value_str ":"] end]
+                set resp_value_hex [string trim $resp_value_hex]
+                set resp_value 0x$resp_value_hex
+            }
             
             # Check for EXIT response or termination condition
-            if {[expr $resp_value & $::RESP_ERROR]} {
+            if {[expr {$resp_value & $::RESP_ERROR}]} {
                 # Error response - read error data
                 set error_data [read_data_area 1024]
                 puts "Error response: '$error_data'"
@@ -827,13 +832,14 @@ proc poll_response_register {} {
                 mwr $resp_reg_addr 0
                 # Optionally exit on error
                 # set running 0
-            } elseif {[expr $resp_value & $::RESP_SUCCESS]} {
+            } elseif {[expr {$resp_value & $::RESP_SUCCESS}]} {
                 # Success response - read data if available
                 set response_data [read_data_area 1024]
                 if {[string match "*EXIT*" $response_data] || [string match "*exit*" $response_data]} {
                     puts "Exit command received: '$response_data'"
                     log_message "Exit command received: '$response_data'"
                     set running 0
+                    puts "Stopping poll_response_register loop..."
                 }
                 # Clear response register
                 mwr $resp_reg_addr 0
@@ -842,8 +848,12 @@ proc poll_response_register {} {
             # Poll every 100ms
             after 100
         }
+        puts "Exiting poll_response_register - Polling loop ended"
+        log_message "Exiting poll_response_register - Polling loop ended"
     } else {
         # Fallback: wait to keep the tcp socket alive if shared memory not available
+        puts "Shared memory not available - Using vwait forever fallback"
+        log_message "poll_response_register: Shared memory not available, using vwait forever"
         vwait forever
     }
 }
@@ -876,26 +886,23 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         if {$boot_mode == "jtag"} {
             puts "Downloading Device Application .elf file ($app_elf)"
             dow $app_elf
+            
+            bpremove -all
+            after 1000
 
             # Clear registers
+            puts "Initializing shared memory communication..."
+            init_shared_memory
+            puts "Shared memory communication ready"
+
+            puts "Place A53_0 into execution state..."
+            con
+
         }
 
-        puts "Place A53_0 into execution state..."
-        con
-
-
-        
-        # Initialize shared memory communication if available
-        #if {[info exists ::shared_mem_base]} {
-        #    puts "Initializing shared memory communication..."
-        #    init_shared_memory
-        #    puts "Shared memory communication ready"
-        #} else {
-        #    puts "Shared memory communication not available - using legacy mode"
-        #}
 
         # Poll response register in a loop to keep the tcp socket alive
-        # poll_response_register
+        poll_response_register
 
     } elseif {$mode == "script"} {
         puts "Mode: Script - Automated operation"
@@ -1003,8 +1010,14 @@ proc init_app {} {
         }
     }
   
+    # If user mode, display pre-connection configuration menu
+    if {$mode == "user"} {
+        pre_connection_menu
+    } 
+    
     # Connect to device and execute in the specified mode
-    run_device_connection $hw_server $mode $boot_mode $term_app $app_elf
+    # Use global ps_app_elf_file variable (may have been updated in pre_connection_menu)
+    run_device_connection $hw_server $mode $boot_mode $term_app $::ps_app_elf_file
 
     # If script mode is enabled, parse INI file and get hardware server and bit file
     if {$mode == "script" && $::script_mode_enabled} {
@@ -1026,10 +1039,6 @@ proc init_app {} {
         set ::bit_file $ini_bit_file
     }
 
-    # If user mode, display main menu before connecting to device
-    if {$mode == "user"} {
-        main_menu
-    } 
     
 }
 
@@ -1111,7 +1120,255 @@ proc view_logs {} {
 
 
 #--------------------------------------------------------------------
-# This function displays and handles the main menu
+# This function displays and handles the pre-connection configuration menu
+#
+# Allows users to configure connection settings before connecting to the device.
+# Once configured, proceeds to connect and run the application.
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc pre_connection_menu {} {
+    set running 1
+    
+    while {$running} {
+        clear_screen
+        show_banner
+        
+        puts "=== PRE-CONNECTION CONFIGURATION ==="
+        puts ""
+        puts "Current Settings:"
+        puts "  Architecture      : $::arch"
+        puts "  Boot Mode         : $::boot_mode"
+        puts "  Hardware Server   : $::hw_server"
+        puts "  PS Ref Clock      : $::ps_ref_clk MHz"
+        puts "  Bit File          : [expr {$::bit_file != "" ? $::bit_file : "(not set)"}]"
+        puts "  FSBL Path         : [expr {[info exists ::fsbl_path] && $::fsbl_path != "" ? $::fsbl_path : "(not set)"}]"
+        puts "  App ELF File      : [expr {$::ps_app_elf_file != "" ? $::ps_app_elf_file : "(not set)"}]"
+        puts "  Terminal App      : $::term_app"
+        puts "  Log Directory     : $::log_dir"
+        puts ""
+        puts "Options:"
+        puts "1. Configure Bit File"
+        puts "2. Configure FSBL Path"
+        puts "3. Configure App ELF File"
+        puts "4. Configure Hardware Server"
+        puts "5. View Logs"
+        puts "6. Help"
+        puts "9. Connect to Device (proceed with current settings)"
+        puts "0. Exit"
+        puts ""
+        puts -nonewline "Enter choice (0-6, 9): "
+        flush stdout
+        
+        set choice [gets stdin]
+        set choice [string trim $choice]
+        
+        switch $choice {
+            "1" {
+                configure_bit_file_menu
+            }
+            "2" {
+                configure_fsbl_path_menu
+            }
+            "3" {
+                configure_app_elf_menu
+            }
+            "4" {
+                configure_hw_server_menu
+            }
+            "5" {
+                view_logs
+            }
+            "6" {
+                show_help_menu
+            }
+            "9" {
+                set running 0
+            }
+            "0" {
+                exit_application
+                set running 0
+            }
+            default {
+                puts "\aInvalid choice. Please enter 0-6 or 9."
+                after 1000
+            }
+        }
+    }
+}
+
+#--------------------------------------------------------------------
+# This function configures the bit file path
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_bit_file_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Bit File ==="
+    puts ""
+    
+    if {$::bit_file != ""} {
+        puts "Current bit file: $::bit_file"
+    } else {
+        puts "Current bit file: (not set)"
+    }
+    
+    puts ""
+    puts -nonewline "Enter bit file path (or press Enter to keep current): "
+    flush stdout
+    set bit_path [gets stdin]
+    set bit_path [string trim $bit_path]
+    
+    if {$bit_path != ""} {
+        if {[file exists $bit_path]} {
+            set ::bit_file $bit_path
+            puts "Bit file set to: $::bit_file"
+            log_message "Bit file configured: $::bit_file"
+        } else {
+            puts "Warning: File does not exist: $bit_path"
+            puts "Bit file path will be set anyway, but may cause errors during connection."
+            set ::bit_file $bit_path
+        }
+    } else {
+        puts "Bit file path unchanged"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the FSBL path
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_fsbl_path_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure FSBL Path ==="
+    puts ""
+    
+    if {[info exists ::fsbl_path] && $::fsbl_path != ""} {
+        puts "Current FSBL path: $::fsbl_path"
+    } else {
+        puts "Current FSBL path: (not set)"
+    }
+    
+    puts ""
+    puts -nonewline "Enter FSBL ELF file path (or press Enter to clear): "
+    flush stdout
+    set fsbl_path [gets stdin]
+    set fsbl_path [string trim $fsbl_path]
+    
+    if {$fsbl_path != ""} {
+        if {[file exists $fsbl_path]} {
+            set ::fsbl_path $fsbl_path
+            puts "FSBL path set to: $::fsbl_path"
+            log_message "FSBL path configured: $::fsbl_path"
+        } else {
+            puts "Warning: File does not exist: $fsbl_path"
+            puts "FSBL path will be set anyway, but may cause errors during connection."
+            set ::fsbl_path $fsbl_path
+        }
+    } else {
+        set ::fsbl_path ""
+        puts "FSBL path cleared (will skip FSBL download)"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the application ELF file path
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_app_elf_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Application ELF File ==="
+    puts ""
+    
+    if {[info exists ::ps_app_elf_file] && $::ps_app_elf_file != ""} {
+        puts "Current app ELF file: $::ps_app_elf_file"
+    } else {
+        puts "Current app ELF file: (not set)"
+    }
+    
+    puts ""
+    puts -nonewline "Enter application ELF file path (or press Enter to keep current): "
+    flush stdout
+    set elf_path [gets stdin]
+    set elf_path [string trim $elf_path]
+    
+    if {$elf_path != ""} {
+        if {[file exists $elf_path]} {
+            set ::ps_app_elf_file $elf_path
+            puts "App ELF file set to: $::ps_app_elf_file"
+            log_message "App ELF file configured: $::ps_app_elf_file"
+        } else {
+            puts "Warning: File does not exist: $elf_path"
+            puts "ELF path will be set anyway, but may cause errors during download."
+            set ::ps_app_elf_file $elf_path
+        }
+    } else {
+        puts "App ELF file path unchanged"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function configures the hardware server address
+#
+#--------------------------------------------------------------------
+#
+#--------------------------------------------------------------------
+proc configure_hw_server_menu {} {
+    clear_screen
+    show_banner
+    
+    puts "=== Configure Hardware Server ==="
+    puts ""
+    
+    puts "Current hardware server: $::hw_server"
+    puts ""
+    puts -nonewline "Enter hardware server address (hostname or IP, or press Enter to keep current): "
+    flush stdout
+    set hw_addr [gets stdin]
+    set hw_addr [string trim $hw_addr]
+    
+    if {$hw_addr != ""} {
+        # Remove port if included (just take hostname/IP)
+        set hw_addr [regsub ":3121" $hw_addr ""]
+        set ::hw_server $hw_addr
+        puts "Hardware server set to: $::hw_server"
+        log_message "Hardware server configured: $::hw_server"
+    } else {
+        puts "Hardware server unchanged"
+    }
+    
+    puts ""
+    puts "Press any key to continue..."
+    gets stdin
+}
+
+#--------------------------------------------------------------------
+# This function displays and handles the main menu (for post-connection use)
+# Note: This menu requires device connection and shared memory to be initialized
 #
 #--------------------------------------------------------------------
 #
@@ -2424,7 +2681,7 @@ proc show_help_menu {} {
 #--------------------------------------------------------------------
 proc exit_application {} {
     puts ""
-    puts -nonewline "Quit Device Runner CLI? (y/[n]) -> "
+    puts -nonewline "Quit Device Runner CLI? (y/\[n\]) -> "
     flush stdout
     set confirm [gets stdin]
     
@@ -2596,9 +2853,9 @@ proc run_script_mode_from_ini {ini_file} {
     
     # Get configuration values
     set hw_server [get_ini_config "connection.hw_server" "localhost"]
-    set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
-    set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
-    set startup_mode_addr [get_ini_config "registers.startup_mode_addr" "0xXXXX0008"]
+    set command_addr [get_ini_config "registers.command_addr" "0x10000000"]
+    set response_addr [get_ini_config "registers.response_addr" "0x10000004"]
+    set startup_mode_addr [get_ini_config "registers.startup_mode_addr" "0x10000008"]
     set log_file [get_ini_config "logging.log_file" "script_log.txt"]
     set timeout [get_ini_config "timing.timeout" "5000"]
     set retries [get_ini_config "timing.retries" "3"]
@@ -2695,8 +2952,8 @@ proc execute_script_command {command} {
     }
     
     # Fallback to legacy register-based communication
-    set command_addr [get_ini_config "registers.command_addr" "0xXXXX0000"]
-    set response_addr [get_ini_config "registers.response_addr" "0xXXXX0004"]
+    set command_addr [get_ini_config "registers.command_addr" "0x10000000"]
+    set response_addr [get_ini_config "registers.response_addr" "0x10000004"]
     set timeout [get_ini_config "timing.timeout" "5000"]
     
     # Parse command and execute
