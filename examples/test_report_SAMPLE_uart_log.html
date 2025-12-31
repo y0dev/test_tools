@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>UART Log - Power Cycle Test A</title>
+<style>
+    body { font-family: Arial; background: #f5f5f5; margin: 20px; }
+    .container { background: white; padding: 20px; border-radius: 8px; }
+    pre { background: #111; color: #0f0; padding: 10px; border-radius: 8px; overflow-x: auto; }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>UART Log</h1>
+<a href="index.html">Back to Main Report</a>
+
+<pre>
+[00.001] Bootloader start
+[00.015] CPU reset OK
+[00.112] Flash OK
+[00.213] Kernel booting...
+[00.512] Init complete
+[01.004] Cycle 1 PASS
+
+[01.112] Bootloader start
+[01.126] CPU reset OK
+[01.202] Flash ERROR: READ TIMEOUT
+[01.889] Cycle 2 FAIL
+
+[02.005] Bootloader start
+[02.019] CPU reset OK
+[02.114] Flash OK
+[02.623] Init complete
+[03.002] Cycle 3 PASS
+</pre>
+
+</div>
+</body>
+</html>

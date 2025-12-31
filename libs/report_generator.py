@@ -1,6 +1,7 @@
 import json
 import csv
 import os
+import socket
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
@@ -348,156 +349,213 @@ class ReportGenerator:
             self.logger.error(f"Error generating text report: {e}")
             return None
     
-    def generate_html_report(self, test_summary: Dict, cycle_data: List[Dict] = None,
-                           uart_data: List[Dict] = None, validation_results: List[Dict] = None) -> Optional[str]:
+    def generate_html_report(
+        self,
+        test_summary: Dict,
+        cycle_data: List[Dict] = None,
+        uart_data: List[Dict] = None,
+        validation_results: List[Dict] = None
+    ) -> Optional[str]:
+
         """
-        Generate HTML report with visual charts and tables.
-        
-        :param test_summary: Test summary data
-        :param cycle_data: Detailed cycle data
-        :param uart_data: UART data logs
-        :param validation_results: Validation results
-        :return: Path to generated HTML file
+        Generate main report + expected vs actual page + UART page.
         """
+
         try:
-            filename = f'test_report_{self.session_timestamp}.html'
-            filepath = self.report_directory / filename
-            
-            # Calculate statistics
+            timestamp = self.session_timestamp
+            base_filename = f"test_report_{timestamp}"
+            main_path = self.report_directory / f"{base_filename}.html"
+            expected_path = self.report_directory / f"{base_filename}_expected_vs_actual.html"
+            uart_path = self.report_directory / f"{base_filename}_uart_log.html"
+
+            # ----------- Calculate statistics -----------
             stats = self._calculate_statistics(test_summary, cycle_data, validation_results)
-            
-            html_content = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
+
+            # ============================================================
+            #  PAGE 1 — MAIN REPORT
+            # ============================================================
+            html_main = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Report - {test_summary.get('test_name', 'Unknown Test')}</title>
+    <title>Main Test Report - {test_summary.get('test_name')}</title>
     <style>
-        body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
-        .container {{ max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-        .header {{ text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }}
-        .summary {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }}
-        .summary-card {{ background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff; }}
+        body {{ font-family: Arial; background: #f5f5f5; margin: 20px; }}
+        .container {{ background: white; padding: 20px; border-radius: 8px; }}
+        .summary-card {{ background: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; border-radius: 5px; }}
         .summary-card.success {{ border-left-color: #28a745; }}
         .summary-card.error {{ border-left-color: #dc3545; }}
-        .cycle-table {{ width: 100%; border-collapse: collapse; margin-bottom: 30px; }}
-        .cycle-table th, .cycle-table td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        .cycle-table th {{ background-color: #f2f2f2; }}
-        .cycle-table tr:nth-child(even) {{ background-color: #f9f9f9; }}
+        table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; }}
+        th {{ background: #eee; }}
         .status-pass {{ color: #28a745; font-weight: bold; }}
         .status-fail {{ color: #dc3545; font-weight: bold; }}
-        .chart-container {{ margin: 20px 0; }}
-        .footer {{ text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }}
+        a.page-link {{ font-size: 18px; display: block; margin: 10px 0; }}
     </style>
-</head>
-<body>
+    </head>
+
+    <body>
     <div class="container">
-        <div class="header">
-            <h1>Test Report: {test_summary.get('test_name', 'Unknown Test')}</h1>
-            <p>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        </div>
-        
-        <div class="summary">
-            <div class="summary-card {'success' if test_summary.get('success_rate', 0) > 0.8 else 'error'}">
-                <h3>Success Rate</h3>
-                <p style="font-size: 24px; margin: 0;">{test_summary.get('success_rate', 0):.1%}</p>
-            </div>
-            <div class="summary-card">
-                <h3>Total Cycles</h3>
-                <p style="font-size: 24px; margin: 0;">{test_summary.get('total_cycles', 0)}</p>
-            </div>
-            <div class="summary-card success">
-                <h3>Passed</h3>
-                <p style="font-size: 24px; margin: 0;">{test_summary.get('successful_cycles', 0)}</p>
-            </div>
-            <div class="summary-card error">
-                <h3>Failed</h3>
-                <p style="font-size: 24px; margin: 0;">{test_summary.get('failed_cycles', 0)}</p>
-            </div>
-            <div class="summary-card">
-                <h3>UART Data Points</h3>
-                <p style="font-size: 24px; margin: 0;">{test_summary.get('total_uart_data_points', 0)}</p>
-            </div>
-            <div class="summary-card">
-                <h3>Validations</h3>
-                <p style="font-size: 24px; margin: 0;">{test_summary.get('total_validations', 0)}</p>
-            </div>
-        </div>
-        
-        <h2>Cycle Details</h2>
-        <table class="cycle-table">
-            <thead>
-                <tr>
-                    <th>Cycle</th>
-                    <th>Status</th>
-                    <th>Duration</th>
-                    <th>UART Data</th>
-                    <th>Validations</th>
-                    <th>Errors</th>
-                </tr>
-            </thead>
-            <tbody>
-"""
-            
-            # Add cycle data rows
-            if cycle_data:
-                for cycle in cycle_data:
-                    cycle_num = cycle.get('cycle_number', 0)
-                    success = cycle.get('success', False)
-                    duration = str(cycle.get('duration', 'N/A'))
-                    uart_count = cycle.get('uart_data_count', 0)
-                    validation_count = len(cycle.get('validations', []))
-                    error_count = len(cycle.get('errors', []))
-                    
-                    status_class = 'status-pass' if success else 'status-fail'
-                    status_text = 'PASSED' if success else 'FAILED'
-                    
-                    html_content += f"""
-                <tr>
-                    <td>{cycle_num}</td>
-                    <td class="{status_class}">{status_text}</td>
-                    <td>{duration}</td>
-                    <td>{uart_count}</td>
-                    <td>{validation_count}</td>
-                    <td>{error_count}</td>
-                </tr>
-"""
-            
-            html_content += """
-            </tbody>
-        </table>
-        
-        <h2>Statistics</h2>
-        <div class="chart-container">
-"""
-            
-            # Add statistics
-            if stats:
-                for key, value in stats.items():
-                    html_content += f"<p><strong>{key}:</strong> {value}</p>\n"
-            
-            html_content += f"""
-        </div>
-        
-        <div class="footer">
-            <p>Report generated by Automated Power Cycle and UART Validation Framework</p>
-            <p>Session: {test_summary.get('session_timestamp', 'N/A')}</p>
-        </div>
+    <h1>Main Test Report</h1>
+
+    <h2>Navigation</h2>
+    <a class="page-link" href="{base_filename}_expected_vs_actual.html">Expected vs Actual Results</a>
+    <a class="page-link" href="{base_filename}_uart_log.html">UART Data Log</a>
+
+    <h2>Summary</h2>
+    <div class="summary-card {'success' if test_summary.get('success_rate',0)>0.8 else 'error'}">
+        <h3>Success Rate</h3>
+        <p style="font-size:24px">{test_summary.get('success_rate',0):.1%}</p>
     </div>
-</body>
-</html>
-"""
-            
-            with open(filepath, 'w', encoding='utf-8') as htmlfile:
-                htmlfile.write(html_content)
-            
-            self.logger.info(f"HTML report generated: {filepath}")
-            return str(filepath)
-            
+
+    <table>
+    <tr><th>Total Cycles</th><td>{test_summary.get('total_cycles')}</td></tr>
+    <tr><th>Passed</th><td>{test_summary.get('successful_cycles')}</td></tr>
+    <tr><th>Failed</th><td>{test_summary.get('failed_cycles')}</td></tr>
+    <tr><th>UART Data Points</th><td>{test_summary.get('total_uart_data_points')}</td></tr>
+    <tr><th>Validations</th><td>{test_summary.get('total_validations')}</td></tr>
+    </table>
+
+    <h2>Cycle Details</h2>
+    <table>
+    <tr>
+        <th>Cycle</th><th>Status</th><th>Duration</th><th>UART Count</th><th>Validations</th><th>Errors</th>
+    </tr>
+    """
+
+            if cycle_data:
+                for c in cycle_data:
+                    status_class = "status-pass" if c.get("success") else "status-fail"
+                    html_main += f"""
+    <tr>
+    <td>{c.get('cycle_number')}</td>
+    <td class="{status_class}">{'PASSED' if c.get('success') else 'FAILED'}</td>
+    <td>{c.get('duration')}</td>
+    <td>{c.get('uart_data_count',0)}</td>
+    <td>{len(c.get('validations',[]))}</td>
+    <td>{len(c.get('errors',[]))}</td>
+    </tr>
+    """
+
+            html_main += """
+    </table>
+
+    <h2>Statistics</h2>
+    """
+
+            for k, v in stats.items():
+                html_main += f"<p><strong>{k}</strong>: {v}</p>"
+
+            html_main += """
+    </div></body></html>
+    """
+
+            with open(main_path, "w", encoding="utf-8") as f:
+                f.write(html_main)
+
+
+
+            # ============================================================
+            #  PAGE 2 — EXPECTED VS ACTUAL RESULTS
+            # ============================================================
+            html_expected = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="UTF-8">
+    <title>Expected vs Actual - {test_summary.get('test_name')}</title>
+    <style>
+        body {{ font-family: Arial; background: #f5f5f5; margin: 20px; }}
+        .container {{ background: white; padding: 20px; border-radius: 8px; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th, td {{ border: 1px solid #ccc; padding: 8px; }}
+        th {{ background: #eee; }}
+        .pass {{ color: #28a745; font-weight: bold; }}
+        .fail {{ color: #dc3545; font-weight: bold; }}
+    </style>
+    </head>
+    <body>
+    <div class="container">
+    <h1>Expected vs Actual Validation Results</h1>
+    <a href="{base_filename}.html">Back to Main Report</a>
+
+    <table>
+    <tr>
+        <th>Cycle</th>
+        <th>Check Name</th>
+        <th>Expected</th>
+        <th>Actual</th>
+        <th>Status</th>
+    </tr>
+    """
+
+            if validation_results:
+                for v in validation_results:
+                    status = "pass" if v.get("pass") else "fail"
+                    html_expected += f"""
+    <tr>
+    <td>{v.get('cycle')}</td>
+    <td>{v.get('name')}</td>
+    <td>{v.get('expected')}</td>
+    <td>{v.get('actual')}</td>
+    <td class="{status}">{'PASS' if v.get('pass') else 'FAIL'}</td>
+    </tr>
+    """
+
+            html_expected += """
+    </table>
+    </div></body></html>
+    """
+
+            with open(expected_path, "w", encoding="utf-8") as f:
+                f.write(html_expected)
+
+
+
+            # ============================================================
+            #  PAGE 3 — UART LOG PAGE
+            # ============================================================
+            html_uart = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="UTF-8">
+    <title>UART Log - {test_summary.get('test_name')}</title>
+    <style>
+        body {{ font-family: Arial; background: #f5f5f5; margin: 20px; }}
+        .container {{ background: white; padding: 20px; border-radius: 8px; }}
+        pre {{ background: #111; color: #0f0; padding: 10px; border-radius: 8px; overflow-x: auto; }}
+    </style>
+    </head>
+    <body>
+    <div class="container">
+    <h1>UART Log</h1>
+    <a href="{base_filename}.html">Back to Main Report</a>
+
+    <pre>
+    """
+
+            if uart_data:
+                for entry in uart_data:
+                    ts = entry.get("timestamp")
+                    msg = entry.get("message")
+                    html_uart += f"[{ts}] {msg}\n"
+
+            html_uart += "</pre></div></body></html>"
+
+            with open(uart_path, "w", encoding="utf-8") as f:
+                f.write(html_uart)
+
+
+
+            self.logger.info(f"HTML report generated: {main_path}")
+            return str(main_path)
+
         except Exception as e:
             self.logger.error(f"Error generating HTML report: {e}")
             return None
+
     
     def _calculate_statistics(self, test_summary: Dict, cycle_data: List[Dict] = None,
                             validation_results: List[Dict] = None) -> Dict[str, Any]:

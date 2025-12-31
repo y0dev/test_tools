@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Expected vs Actual - Power Cycle Test A</title>
+<style>
+    body { font-family: Arial; background: #f5f5f5; margin: 20px; }
+    .container { background: white; padding: 20px; border-radius: 8px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; }
+    th { background: #eee; }
+    .pass { color: #28a745; font-weight: bold; }
+    .fail { color: #dc3545; font-weight: bold; }
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>Expected vs Actual Validation Results</h1>
+<a href="index.html">Back to Main Report</a>
+
+<table>
+<tr>
+    <th>Cycle</th>
+    <th>Check Name</th>
+    <th>Expected</th>
+    <th>Actual</th>
+    <th>Status</th>
+</tr>
+
+<tr>
+<td>1</td>
+<td>Voltage Stable</td>
+<td>3.3V</td>
+<td>3.29V</td>
+<td class="pass">PASS</td>
+</tr>
+
+<tr>
+<td>1</td>
+<td>Boot Time</td>
+<td>< 900ms</td>
+<td>880ms</td>
+<td class="pass">PASS</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>Voltage Stable</td>
+<td>3.3V</td>
+<td>3.05V</td>
+<td class="fail">FAIL</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>Boot Time</td>
+<td>< 900ms</td>
+<td>940ms</td>
+<td class="fail">FAIL</td>
+</tr>
+
+<tr>
+<td>3</td>
+<td>Voltage Stable</td>
+<td>3.3V</td>
+<td>3.31V</td>
+<td class="pass">PASS</td>
+</tr>
+
+</table>
+
+</div>
+</body>
+</html>
