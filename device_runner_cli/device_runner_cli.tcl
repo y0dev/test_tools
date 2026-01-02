@@ -642,9 +642,39 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         log_message "ERROR: $error_msg"
         return 1
     }
+
+    # Step 3: Stop processor and set boot mode to JTAG
+    puts "Step 3: Stopping processor and setting boot mode to JTAG..."
+    if {[catch {stop} err]} {
+        set error_msg "Failed to stop processor: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
     
-    # Step 3: Reset all cores
-    puts "Step 3: Resetting PSU..."
+    # Set control register (CRL_APB control)
+    # Address 0xFFCA0010 is used for some control operations
+    if {[catch {mwr 0xffca0010 0x0} err]} {
+        set warning_msg "Warning: Failed to write control register (0xffca0010): $err"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+        # Continue as this may not be critical
+    }
+    
+    # Set boot mode register to JTAG (0x0100 = JTAG boot mode)
+    # Address 0xFF5E0200 is the CRL_APB BOOT_MODE register
+    # Value 0x0100 sets boot mode to JTAG (lower 4 bits = 0x0, bit 8 = 1 for some control)
+    if {[catch {mwr 0xff5e0200 0x0100} err]} {
+        set error_msg "Failed to set boot mode to JTAG (0xff5e0200): $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 1
+    }
+    puts "Boot mode set to JTAG successfully"
+    log_message "Boot mode set to JTAG (0xFF5E0200 = 0x0100)"
+    
+    # Step 4: Reset all cores
+    puts "Step 4: Resetting PSU..."
     if {[catch {rst -system} err]} {
         set error_msg "Failed to reset PSU: $err"
         puts "ERROR: $error_msg"
@@ -653,7 +683,15 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     }
     after 1000
 
-    puts "Step 4: Finding APU target..."
+    # Continue execution after setting boot mode
+    if {[catch {con} err]} {
+        set warning_msg "Warning: Failed to continue execution after boot mode setup: $err"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+        # Continue as processor may already be running
+    }
+
+    puts "Step 5: Finding APU target..."
     if {[catch {targets -set -nocase -filter {name =~ "*APU*"}} err]} {
         set error_msg "Failed to set APU target: $err"
         puts "ERROR: $error_msg"
@@ -661,8 +699,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         return 1
     }
 
-    # Step 5: Resetting APU
-    puts "Step 5: Resetting APU..."
+    # Step 6: Resetting APU
+    puts "Step 6: Resetting APU..."
     if {[catch {rst -system} err]} {
         set error_msg "Failed to reset APU: $err"
         puts "ERROR: $error_msg"
@@ -671,8 +709,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     }
     after 1000
 
-    # Step 6: Loading hardware platform
-    puts "Step 6: Loading hardware platform..."
+    # Step 7: Loading hardware platform
+    puts "Step 7: Loading hardware platform..."
     set hw_platform_path "F:/Software/Embedded/00_Workspace/vitis/hello_world/platform/export/platform/hw/kv260_example.xsa"
     if {[catch {loadhw -hw $hw_platform_path} err]} {
         set error_msg "Failed to load hardware platform ($hw_platform_path): $err"
@@ -690,8 +728,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         # Continue as this is not critical
     }
     
-    # Step 7: Program FPGA with bit file
-    puts "Step 7: Programming FPGA..."
+    # Step 8: Program FPGA with bit file
+    puts "Step 8: Programming FPGA..."
     if {$bit_file_path != ""} {
         if {[file exists $bit_file_path]} {
             puts "Programming FPGA with: $bit_file_path"
@@ -713,8 +751,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         log_message "Warning: No bit file specified for FPGA programming"
     }
 
-    # Step 8: Disabling debug firewall
-    puts "Step 8: Disabling debug firewall..."
+    # Step 9: Disabling debug firewall
+    puts "Step 9: Disabling debug firewall..."
     if {[catch {configparams force-mem-access 1} err]} {
         set warning_msg "Warning: Failed to disable debug firewall: $err"
         puts "WARNING: $warning_msg"
@@ -722,8 +760,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         # Continue as this is not critical
     }
     
-    # Step 9: Connect to target a53_0
-    puts "Step 9: Connecting to target a53_0..."
+    # Step 10: Connect to target a53_0
+    puts "Step 10: Connecting to target a53_0..."
     if {[catch {targets -set -nocase -filter {name =~ "*a53*#0"}} err]} {
         set error_msg "Failed to connect to A53 target: $err"
         puts "ERROR: $error_msg"
@@ -731,8 +769,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         return 1
     }
     
-    # Step 10: Verify target is ready and reset processor
-    puts "Step 10: Resetting processor..."
+    # Step 11: Verify target is ready and reset processor
+    puts "Step 11: Resetting processor..."
     if {[catch {rst -processor} err]} {
         set error_msg "Failed to reset processor: $err"
         puts "ERROR: $error_msg"
@@ -741,8 +779,8 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
     }
     after 1000
 
-    # Step 11: Download FSBL (if path is provided)
-    puts "Step 11: Checking for FSBL..."
+    # Step 12: Download FSBL (if path is provided)
+    puts "Step 12: Checking for FSBL..."
     if {[info exists ::fsbl_path] && $::fsbl_path != ""} {
         if {[file exists $::fsbl_path]} {
             puts "Downloading FSBL from: $::fsbl_path"
@@ -799,9 +837,9 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
         set microblaze_enabled 0
     }
     
-    # Step 12: Setup MDM and Microblaze only if enabled
+    # Step 13: Setup MDM and Microblaze only if enabled
     if {$microblaze_enabled} {
-        puts "Step 12: Microblaze enabled - Setting up MDM and downloading Microblaze app..."
+        puts "Step 13: Microblaze enabled - Setting up MDM and downloading Microblaze app..."
         
         # Setup MDM
         if {[catch {configparams mdm-detect-bscan-mask 2} err]} {
@@ -838,12 +876,12 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
             }
         }
     } else {
-        puts "Step 12: Microblaze disabled - Skipping Microblaze setup"
-        log_message "Step 12: Microblaze disabled - Skipping Microblaze setup"
+        puts "Step 13: Microblaze disabled - Skipping Microblaze setup"
+        log_message "Step 13: Microblaze disabled - Skipping Microblaze setup"
     }
 
-    # Step 13: Final A53 connection and reset
-    puts "Step 13: Final A53 connection and reset..."
+    # Step 14: Final A53 connection and reset
+    puts "Step 14: Final A53 connection and reset..."
     if {[catch {targets -set -nocase -filter {name =~ "*a53*#0"}} err]} {
         set error_msg "Failed to set final A53 target: $err"
         puts "ERROR: $error_msg"
