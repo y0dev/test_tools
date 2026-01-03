@@ -11,7 +11,8 @@ set ::console_widget ""
 
 # Script mode configuration
 set ::script_config_file ""
-set ::script_config_array ""
+# Initialize script_config_array as an array (don't set to empty string)
+array set ::script_config_array {}
 set ::script_mode_enabled 0
 
 
@@ -31,15 +32,10 @@ set ::ps_ref_clks  {27 33 50 60}
 # Application state
 set ::app_path ""
 set ::bit_file ""
-set ::param1 ""
-set ::param2 ""
-set ::param3 ""
-set ::xsdb_path ""
-set ::jtag_tcp ""
 set ::ps_app_elf_file ""
 
 # Command line arguments
-set ::arch          "zynq"
+set ::arch          "zynqMP"
 set ::mode          "user"
 set ::boot_mode     "jtag"
 set ::hw_server     "localhost"
@@ -89,8 +85,9 @@ proc parse_ini_file {ini_file} {
         }
         
         # Check for section header [section]
-        if {[string match "\[*\]" $line]} {
-            set current_section [string range $line 1 end-1]
+        # Use regexp to match [section] pattern
+        if {[regexp {^\[([^\]]+)\]$} $line match section_name]} {
+            set current_section $section_name
             puts "Found section: $current_section"
             continue
         }
@@ -134,6 +131,11 @@ proc parse_ini_file {ini_file} {
 #--------------------------------------------------------------------
 proc get_ini_config {key {default_value ""}} {
     global script_config_array
+
+    # Debugging to view the array contents
+    # set sc_array [array get script_config_array]
+    # puts "Key: $key"
+    # puts "Array: $sc_array"
     
     if {[info exists script_config_array($key)]} {
         return $script_config_array($key)
@@ -213,12 +215,13 @@ proc parse_command_line_args {} {
                     set args_array(mode) [lindex $argv $i]
                     # check for valid run mode
                     switch  -nocase $args_array(mode) {
-                        "user" - 
-                        "script" {
+                        "user" -
+                        "script" -
+                        "test" {
                             # valid
                         }
                         default { # invalid run mode
-                            puts " ERROR: Invalid execution mode: $args_array(mode)"
+                            puts " ERROR: Invalid execution mode: $args_array(mode). Must be 'user', 'script', or 'test'"
                             return 1
                         }
                     }
@@ -230,13 +233,20 @@ proc parse_command_line_args {} {
                 if {$i < [llength $argv]} {
                     set args_array(boot_mode) [lindex $argv $i]
                     # check for valid boot mode
+                    # Boot mode options:
+                    # - jtag: JTAG mode
+                    # - jtag_script: JTAG script mode - reading and writing to registers via JTAG
+                    # - uart: UART mode - reading commands from UART and responding
                     switch  -nocase $args_array(boot_mode) {
-                        "jtag" - 
+                        "jtag" -
+                        "jtag_script" -
+                        "uart" -
                         "other" {
                             # valid
                         }
                         default { # invalid boot mode
                             puts " ERROR: Invalid boot mode: $args_array(boot_mode)"
+                            puts " ERROR: Valid boot modes are: jtag, jtag_script, uart"
                             return 1
                         }
                     }
@@ -320,6 +330,12 @@ proc parse_command_line_args {} {
             return 1
         }
         puts "INFO: FSBL file validated: $args_array(fsbl_path)"
+    }
+
+    # Check if hw_server is localhost and convert to 127.0.0.1
+    if {[string tolower $args_array(hw_server)] == "localhost"} {
+        set args_array(hw_server) "127.0.0.1"
+        log_message "Converted hw_server from 'localhost' to '127.0.0.1'"
     }
 
     # Construct the .elf filename based on ps ref clk freq value
@@ -912,12 +928,15 @@ proc conn_device {hw_server_host {bit_file_path ""}} {
 #--------------------------------------------------------------------
 proc show_help {} {
     puts "Device Runner CLI - FPGA Application Runner"
-    puts "Usage: device_runner_cli.tcl [options]"
+    puts "Usage: device_runner_cli.tcl \[options\]"
     puts ""
     puts "Options:"
-    puts "  -arch <arch>            Target architecture (default: zynq)"
-    puts "  -mode <mode>            Operation mode user | script (default: user)"
-    puts "  -boot_mode <mode>       Boot mode jtag | qspi | sd (default: jtag)"
+    puts "  -arch <arch>            Target architecture (default: zynqMP)"
+    puts "  -mode <mode>            Operation mode user | script | test (default: user)"
+    puts "  -boot_mode <mode>       Boot mode jtag | jtag_script | uart (default: jtag)"
+    puts "                          jtag: JTAG mode"
+    puts "                          jtag_script: JTAG script mode - reading and writing to registers via JTAG"
+    puts "                          uart: UART mode - reading commands from UART and responding"
     puts "  -hw_server <server>     Hardware server address (default: localhost)"
     puts "  -ps_ref_clk <freq>      PS reference clock frequency (default: 0)"
     puts "  -term_app <app>         Terminal application (default: device_runner_term.bat)"
@@ -925,31 +944,40 @@ proc show_help {} {
     puts "  -ini_config <file>      INI configuration file for script mode"
     puts "  -bit_file <file>        Bit file for FPGA programming"
     puts "  -fsbl_path <file>       FSBL (First Stage Boot Loader) ELF file path"
-    puts "  -xsdb_path <path>       Path to XSDB executable"
-    puts "  -jtag_tcp <url>         JTAG TCP connection URL"
     puts "  -help                   Show this help message"
     puts ""
     puts "Script Mode with INI Configuration:"
-    puts "  device_runner_cli.tcl -mode script -ini_config config.ini"
+    puts "  device_runner_cli.tcl -mode script -ini_config example_config.ini"
     puts ""
     puts "INI File Format:"
-    puts "  [connection]"
+    puts "  \[application\]"
+    puts "  arch=zynqMP"
+    puts "  ref_clk=33"
+    puts "  fbsl_elf_file=bin\\\\fsbl.elf"
+    puts "  app_elf_file=bin\\\\jtag_app.elf"
+    puts "  bit_file=bin\\\\kv260_design.bit"
+    puts "  # Boot mode"
+    puts "  # JTAG: JTAG mode (jtag)"
+    puts "  # JTAG_SCRIPT: JTAG script mode - reading and writing to registers via JTAG (jtag_script)"
+    puts "  # UART: UART mode - reading commands from UART and responding (uart)"
+    puts "  boot_mode=jtag_script"
+    puts ""
+    puts "  \[connection\]"
     puts "  hw_server=localhost"
-    puts "  [registers]"
-    puts "  command_addr=0x10000000"
-    puts "  response_addr=0x10000004"
-    puts "  startup_mode_addr=0x10000008"
-    puts "  [commands]"
-    puts "  cmd1=init"
-    puts "  cmd2=run_app"
-    puts "  cmd3=get_status"
+    puts "  term_app=device_runner_term.bat"
+    puts ""
+    puts "  \[logging\]"
+    puts "  log_dir=logs"
+    puts "  log_file=script_execution.log"
+    puts ""
+    puts "  \[microblaze\]"
+    puts "  enable=0"
+    puts "  mb_elf_file=bin\\\\microblaze_app.elf"
     puts ""
     puts "Examples:"
-    puts "  device_runner_cli.tcl -arch zynq -mode user -hw_server localhost"
-    puts "  device_runner_cli.tcl -mode script -ini_config my_config.ini"
-    puts "  device_runner_cli.tcl -bit_file design.bit -mode user"
-    puts "  device_runner_cli.tcl -xsdb_path C:/Xilinx/Vitis/2023.2/bin/xsdb.exe"
-    puts "  device_runner_cli.tcl -jtag_tcp 192.168.1.100:3121"
+    puts "  device_runner_cli.tcl -arch zynqMP -mode user -hw_server localhost -ps_ref_clk 0 -term_app device_runner_term.bat -log_dir logs -bit_file bin\\\\kv260_design.bit -fsbl_path bin\\\\fsbl.elf"
+    puts "  device_runner_cli.tcl -mode script -ini_config example_config.ini"
+    puts "  device_runner_cli.tcl -bit_file bin\\\\kv260_design.bit -mode user"
 }
 
 #--------------------------------------------------------------------
@@ -1193,7 +1221,7 @@ proc poll_response_register {} {
 #--------------------------------------------------------------------
 #
 # param hw_server: Hardware server hostname or IP address
-# param mode: Execution mode (user or script)
+# param mode: Execution mode (jtag, script, or test)
 # param boot_mode: Boot mode (jtag or other)
 # param term_app: Terminal application path
 # param app_elf: Application ELF file path
@@ -1210,16 +1238,16 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
     set tcp_port_num [jtagterminal -socket]
     puts "TCP port number: $tcp_port_num"
 
-    # Determine if mode is user or script
+    # Determine execution mode (user, script, or test)
     if {$mode == "user"} {
-        puts "Mode: User - Interactive operation"
+        puts "Mode: JTAG - Interactive operation"
         puts "Starting interactive menu system..."
         
         exec $term_app localhost $tcp_port_num &
         if {$boot_mode == "jtag"} {
             if {![download_app_and_init_shared_memory $app_elf $::MODE_JTAG_INTERACTIVE]} {
                 puts "ERROR: Failed to download application and initialize shared memory"
-                log_message "ERROR: Failed to download application and initialize shared memory in interactive mode"
+                log_message "ERROR: Failed to download application and initialize shared memory in JTAG mode"
                 return 1
             }
 
@@ -1231,7 +1259,6 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
             }
 
         }
-
 
         # Poll response register in a loop to keep the tcp socket alive
         poll_response_register
@@ -1257,8 +1284,13 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         
         # Poll response register in a loop to keep the tcp socket alive
         poll_response_register
+    } elseif {$mode == "test"} {
+        puts "Mode: Test - Test operation"
+        puts "Test mode not yet implemented"
+        log_message "Test mode requested but not yet implemented"
+        return 1
     } else {
-        puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
+        puts "ERROR: Invalid mode '$mode'. Must be 'jtag', 'script', or 'test'"
         log_message "ERROR: Invalid mode '$mode'"
         exit 1
     }
@@ -1295,9 +1327,17 @@ proc init_app {} {
         # Extract all command line arguments into individual variables
         array set args $cmd_args
         
-        # Create individual variables for each argument
-        set arch $args(arch)
+        # Get mode first to determine source of configuration
         set mode $args(mode)
+        
+        # Validate mode - must be user, script, or test
+        if {$mode != "user" && $mode != "script" && $mode != "test"} {
+            puts "ERROR: Invalid mode '$mode'. Must be 'user', 'script', or 'test'"
+            exit 1
+        }
+        
+        # Initialize variables from command line arguments (defaults)
+        set arch $args(arch)
         set boot_mode $args(boot_mode)
         set hw_server $args(hw_server)
         set ps_ref_clk $args(ps_ref_clk)
@@ -1305,6 +1345,68 @@ proc init_app {} {
         set term_app $args(term_app)
         set log_dir $args(log_dir)
         set fsbl_path $args(fsbl_path)
+        set bit_file $args(bit_file)
+        
+        # If script mode, parse INI file FIRST and override values from INI
+        if {$mode == "script"} {
+            # Check if INI config file is provided
+            if {[info exists args(ini_config)] && $args(ini_config) != ""} {
+                set ini_config $args(ini_config)
+                puts "Script mode: Using INI configuration file $ini_config"
+                set ::script_mode_enabled 1
+                set ::script_config_file $ini_config
+                
+                # Parse INI file FIRST before extracting values
+                if {![parse_ini_file $ini_config]} {
+                    puts "ERROR: Failed to parse INI file: $ini_config"
+                    exit 1
+                }
+                
+                # Extract values from INI file (override command-line defaults)
+                set boot_mode [get_ini_config "application.boot_mode" $boot_mode]
+                set ps_ref_clk [get_ini_config "application.ref_clk" $ps_ref_clk]
+                set fsbl_path [get_ini_config "application.fbsl_elf_file" $fsbl_path]
+                # Also check for fsbl_elf_file (correct spelling)
+                if {$fsbl_path == "" || $fsbl_path == $args(fsbl_path)} {
+                    set fsbl_path [get_ini_config "application.fsbl_elf_file" $fsbl_path]
+                }
+                set bit_file [get_ini_config "application.bit_file" $bit_file]
+                set log_dir [get_ini_config "logging.log_dir" $log_dir]
+                set app_elf [get_ini_config "application.app_elf_file" $app_elf]
+                set hw_server [get_ini_config "connection.hw_server" $hw_server]
+                # Convert localhost to 127.0.0.1 if needed
+                if {[string tolower $hw_server] == "localhost"} {
+                    set hw_server "127.0.0.1"
+                    log_message "Converted hw_server from 'localhost' to '127.0.0.1' (from INI config)"
+                }
+                set term_app [get_ini_config "connection.term_app" $term_app]
+                
+                # Update global variables
+                set ::boot_mode $boot_mode
+                set ::ps_ref_clk $ps_ref_clk
+                set ::fsbl_path $fsbl_path
+                set ::bit_file $bit_file
+                set ::log_dir $log_dir
+                set ::ps_app_elf_file $app_elf
+                set ::hw_server $hw_server
+                set ::term_app $term_app
+            } else {
+                puts "ERROR: Script mode requires -ini_config parameter"
+                puts "Please set -ini_config to your INI file path"
+                exit 1
+            }
+        } else {
+            # For user or test mode, use command-line arguments
+            # Update global variables from command-line args
+            set ::boot_mode $boot_mode
+            set ::ps_ref_clk $ps_ref_clk
+            set ::fsbl_path $fsbl_path
+            set ::bit_file $bit_file
+            set ::log_dir $log_dir
+            set ::ps_app_elf_file $app_elf
+            set ::hw_server $hw_server
+            set ::term_app $term_app
+        }
         
         puts "Xilinx Device type    : $arch"
         puts "Mode                  : $mode"
@@ -1312,71 +1414,15 @@ proc init_app {} {
         puts "Hardware server       : $hw_server"
         puts "PS reference clock    : $ps_ref_clk MHz"
         puts "FSBL Path             : $fsbl_path"
-        puts "Bit file              : $::bit_file"
+        puts "Bit file              : $bit_file"
+        puts "App ELF file          : $app_elf"
         puts "Log directory         : $log_dir"
-
-        if {$mode == "script"} {
-            puts "Commands Filename    : $xlwp_cmds"
-            if {[catch {source $xlwp_cmds}]} {
-                puts "\nERROR: could not open commands file: $xlwp_cmds"
-                exit 1
-            }
-        }
-
-        # Check for mode
-        if {$mode == "script"} {
-            # Check if INI config file is provided
-            set ini_config [get_cmd_arg "ini_config"]
-            if {$ini_config != ""} {
-                puts "Script mode: Using INI configuration file $ini_config"
-                set ::script_mode_enabled 1
-                set ::script_config_file $ini_config
-            } elseif {$term_app != "" && $term_app != "device_runner_term.bat"} {
-                puts "Script mode: Using script file $term_app"
-            } else {
-                puts "ERROR: Script mode requires either -ini_config or -term_app"
-                puts "Please set -ini_config to your INI file path or -term_app to your script file path"
-                exit 1
-            }
-        } elseif {$mode == "user"} {
-            puts "User mode             : Interactive operation"
-            puts "Terminal Application  : $term_app"
-        } else {
-            puts "ERROR: Invalid mode '$mode'. Must be 'user' or 'script'"
-            exit 1
-        }
+        puts "Terminal Application  : $term_app"
     }
   
-    # If user mode, display pre-connection configuration menu
-    if {$mode == "user"} {
-        pre_connection_menu
-    } 
-    
     # Connect to device and execute in the specified mode
-    # Use global ps_app_elf_file variable (may have been updated in pre_connection_menu)
-    run_device_connection $hw_server $mode $boot_mode $term_app $::ps_app_elf_file
-
-    # If script mode is enabled, parse INI file and get hardware server and bit file
-    if {$mode == "script" && $::script_mode_enabled} {
-        puts "Parsing INI configuration file for script mode..."
-        if {![parse_ini_file $::script_config_file]} {
-            puts "ERROR: Failed to parse INI file: $::script_config_file"
-            exit 1
-        }
-        
-        # Get hardware server and bit file from INI file
-        set ini_hw_server [get_ini_config "connection.hw_server" $hw_server]
-        set ini_bit_file [get_ini_config "fpga.bit_file" $::bit_file]
-        
-        puts "Hardware server from INI: $ini_hw_server"
-        puts "Bit file from INI: $ini_bit_file"
-        
-        # Use INI values
-        set hw_server $ini_hw_server
-        set ::bit_file $ini_bit_file
-    }
-
-    
+    # Use global variables that were set from INI (script mode) or command-line (jtag/test mode)
+    run_device_connection $::hw_server $mode $::boot_mode $::term_app $::ps_app_elf_file
 }
 
 #--------------------------------------------------------------------
@@ -3188,52 +3234,103 @@ proc run_script_mode_from_ini {ini_file} {
         return 0
     }
     
-    # Get configuration values
-    set hw_server [get_ini_config "connection.hw_server" "localhost"]
-    set command_addr [get_ini_config "registers.command_addr" "0x10000000"]
-    set response_addr [get_ini_config "registers.response_addr" "0x10000004"]
-    set startup_mode_addr [get_ini_config "registers.startup_mode_addr" "0x10000008"]
+    # Get configuration values (addresses are known from constants, not needed from INI)
+    # Use get_ini_config which properly accesses the global script_config_array
     set log_file [get_ini_config "logging.log_file" "script_log.txt"]
-    set timeout [get_ini_config "timing.timeout" "5000"]
-    set retries [get_ini_config "timing.retries" "3"]
-    set bit_file [get_ini_config "fpga.bit_file" ""]
+    set bit_file [get_ini_config "application.bit_file" ""]
+    
+    # Use global hw_server (already set from INI in init_app)
+    if {[info exists ::hw_server]} {
+        set hw_server $::hw_server
+    } else {
+        set hw_server "127.0.0.1"
+    }
     
     puts "Configuration loaded:"
     puts "  Hardware Server: $hw_server"
-    puts "  Command Address: $command_addr"
-    puts "  Response Address: $response_addr"
-    puts "  Startup Mode Address: $startup_mode_addr"
     puts "  Log File: $log_file"
-    puts "  Timeout: ${timeout}ms"
-    puts "  Retries: $retries"
     puts "  Bit File: $bit_file"
     
-    # Set script mode in startup register
+    # Set script mode in startup register (using same approach as user mode)
     puts "Setting script mode in startup register..."
-    mwr $startup_mode_addr 0x00000002  ;# JTAG Script Mode
+    if {[catch {mwr [expr $::shared_mem_base + $::STARTUP_MODE_REG_OFFSET] $::MODE_JTAG_SCRIPT} err]} {
+        set error_msg "Failed to set startup mode register: $err"
+        puts "ERROR: $error_msg"
+        log_message "ERROR: $error_msg"
+        return 0
+    }
     
     # Connect to hardware server
+    set error_occurred 0
+    set error_message ""
+    
     puts "Connecting to hardware server: $hw_server"
-    connect -url tcp:$hw_server:3121
+    if {[catch {connect -url tcp:$hw_server:3121} err]} {
+        set error_occurred 1
+        set error_message "Failed to connect to hardware server ($hw_server): $err"
+        puts "ERROR: $error_message"
+        log_message "ERROR: $error_message"
+        return 0
+    }
     
     # Set target to A53 core
     puts "Setting target to A53 core..."
-    targets -set -filter {name =~ "*A53*#0"}
+    if {[catch {targets -set -nocase -filter {name =~ "*a53*#0"}} err]} {
+        set error_occurred 1
+        set error_message "Failed to set A53 target: $err"
+        puts "ERROR: $error_message"
+        log_message "ERROR: $error_message"
+        return 0
+    }
+    
+    # Download and initialize application (using same function as user mode)
+    if {[info exists ::ps_app_elf_file] && $::ps_app_elf_file != ""} {
+        if {![download_app_and_init_shared_memory $::ps_app_elf_file $::MODE_JTAG_SCRIPT true]} {
+            set error_occurred 1
+            set error_message "Failed to download application and initialize shared memory"
+            puts "ERROR: $error_message"
+            log_message "ERROR: $error_message"
+            return 0
+        }
+    } else {
+        set warning_msg "Application ELF file not set, skipping download"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+    }
     
     # Start JTAG terminal logging
     puts "Starting JTAG terminal logging to: $log_file"
-    jtagterminal -start -file $log_file
+    if {[catch {jtagterminal -start -file $log_file} err]} {
+        set warning_msg "Warning: Failed to start JTAG terminal logging: $err"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+        # Continue execution as this is not critical
+    }
     
     # Continue execution
-    puts "Continuing execution..."
-    con
+    puts "Place A53_0 into execution state..."
+    if {[catch {con} err]} {
+        set error_occurred 1
+        set error_message "Failed to continue execution: $err"
+        puts "ERROR: $error_message"
+        log_message "ERROR: $error_message"
+        return 0
+    }
     
     # Execute script commands from INI file
-    execute_script_commands_from_ini
+    # execute_script_commands_from_ini
+    
+    # Poll response register in a loop to keep the tcp socket alive
+    poll_response_register
     
     # Stop JTAG terminal logging
     puts "Stopping JTAG terminal logging..."
-    jtagterminal -stop
+    if {[catch {jtagterminal -stop} err]} {
+        set warning_msg "Warning: Failed to stop JTAG terminal logging: $err"
+        puts "WARNING: $warning_msg"
+        log_message "WARNING: $warning_msg"
+        # Continue as this is not critical
+    }
     
     log_message "INI-based script mode completed"
     puts "INI-based script mode completed"
