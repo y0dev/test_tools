@@ -23,10 +23,8 @@
 #include "xil_printf.h"
 #include "include/types.h"
 #include "include/constants.h"
+#include "helpers.h"
 #include "display.h"
-
-/* External references - declared in jtag_uart_handler.c */
-char get_char_input(void);  /* Forward declaration - implemented in main file */
 
 /**
  * @brief Clear the terminal screen using ANSI escape sequences

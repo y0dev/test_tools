@@ -56,6 +56,7 @@
 #define MODE_JTAG_SCRIPT      0x00000002  ///< Script mode via JTAG UART
 #define MODE_UART_INTERACTIVE 0x00000003  ///< Interactive mode via UART
 #define MODE_UART_SCRIPT      0x00000004  ///< Script mode via UART
+#define MODE_TEST             0x00000005  ///< Test mode via shared memory registers
 
 /**
  * @brief Application operation modes

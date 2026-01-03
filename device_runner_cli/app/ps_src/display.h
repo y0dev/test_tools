@@ -33,7 +33,7 @@ extern volatile int app_mode;
 extern volatile int menu_active;
 
 /* Forward declarations for input functions */
-char get_char_input(void);  /* Implemented in jtag_uart_handler.c */
+/* get_char_input() is now in helpers.h */
 
 /**
  * @brief Clear the terminal screen using ANSI escape sequences

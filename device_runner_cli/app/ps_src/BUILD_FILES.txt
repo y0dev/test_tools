@@ -1,0 +1,68 @@
+================================================================================
+REQUIRED SOURCE FILES FOR VITIS BUILD
+================================================================================
+
+The following source files MUST be added to your Vitis project for successful
+compilation and linking. These files contain the functions that are currently
+showing as "undefined reference" errors.
+
+CORE APPLICATION FILES:
+======================
+- main.c                          (Main entry point)
+- jtag_uart_handler.c             (Main coordinator, mode routing)
+- shared_memory.c                 (Shared memory communication)
+- helpers.c                       (Common utility functions)
+- display.c                       (Display/print functions)
+
+MODE-SPECIFIC FILES:
+===================
+- interactive_mode.c              (Interactive mode implementation)
+- jtag_script_mode.c              (JTAG script mode - REQUIRED)
+- test_mode.c                     (Test mode - REQUIRED)
+- uart_script_mode.c              (UART script mode - REQUIRED)
+
+HEADER FILES (automatically included, but verify paths):
+=========================================================
+- include/constants.h             (All constants)
+- include/types.h                 (Structure definitions)
+- helpers.h                       (Helper function declarations)
+- display.h                       (Display function declarations)
+- jtag_uart_handler.h             (Core handler declarations)
+- shared_memory.h                 (Shared memory declarations)
+- interactive_mode.h              (Interactive mode declarations)
+- jtag_script_mode.h              (JTAG script mode declarations)
+- test_mode.h                     (Test mode declarations)
+- uart_script_mode.h              (UART script mode declarations)
+
+LINKER SCRIPT:
+==============
+- lscript.ld                      (Memory layout definition)
+
+FUNCTIONS CAUSING LINKER ERRORS:
+=================================
+The following functions are defined in the source files listed above:
+
+1. handle_shared_memory_start_test()     -> Defined in test_mode.c
+2. handle_shared_memory_run_test()       -> Defined in test_mode.c
+3. handle_shared_memory_get_test_status()-> Defined in test_mode.c
+4. run_jtag_script_mode()                -> Defined in jtag_script_mode.c
+5. run_test_mode()                       -> Defined in test_mode.c
+6. run_uart_script_mode()                -> Defined in uart_script_mode.c
+7. initialize_test_config()              -> Defined in test_mode.c
+
+HOW TO ADD FILES IN VITIS:
+===========================
+1. Open your Vitis project
+2. Right-click on the "src" folder (or your source folder)
+3. Select "Import Sources..." or "Add Files..."
+4. Navigate to: device_runner_cli/app/ps_src/
+5. Add ALL the .c files listed above
+6. Make sure the include path is set to: device_runner_cli/app/ps_src/
+7. Rebuild the project
+
+Alternatively, if using CMake or a custom build system:
+- Ensure all .c files are listed in your CMakeLists.txt or Makefile
+- Verify include paths are correctly configured
+
+================================================================================
+

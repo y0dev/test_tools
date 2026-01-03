@@ -31,6 +31,7 @@
 #include "include/constants.h"
 #include "display.h"
 #include "jtag_uart_handler.h"
+#include "test_mode.h"
 
 /**
  * @brief Main application entry point

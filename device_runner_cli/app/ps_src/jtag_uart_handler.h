@@ -29,6 +29,10 @@
 #define CMD_EXIT "exit"
 #define CMD_HELP "help"
 
+/* UART Script Mode Commands */
+#define CMD_START "start"  ///< Start application execution (UART script mode)
+#define CMD_STOP "stop"    ///< Stop application execution (UART script mode)
+
 /* Response Codes */
 #define RESPONSE_OK "OK"
 #define RESPONSE_ERROR "ERROR"

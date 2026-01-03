@@ -21,6 +21,7 @@ set ::MODE_JTAG_INTERACTIVE 0x00000001  ;# Interactive mode via JTAG UART
 set ::MODE_JTAG_SCRIPT      0x00000002  ;# Script mode via JTAG UART
 set ::MODE_UART_INTERACTIVE 0x00000003  ;# Interactive mode via UART
 set ::MODE_UART_SCRIPT      0x00000004  ;# Script mode via UART
+set ::MODE_TEST             0x00000005  ;# Test mode via shared memory registers
 
 # Application operation modes
 set ::MODE_INTERACTIVE 0    ;# Interactive menu-driven mode

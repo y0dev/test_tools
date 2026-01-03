@@ -54,6 +54,21 @@ if {[file exists "lib/jtag_reg.tcl"]} {
     puts "Warning: lib/jtag_reg.tcl not found - some helper functions may be unavailable"
 }
 
+# Source script command execution modules
+# Note: messages.tcl is sourced later in the file (around line 621)
+if {[file exists "lib/jtag_script_commands.tcl"]} {
+    source lib/jtag_script_commands.tcl
+    puts "Loaded JTAG script commands module"
+}
+if {[file exists "lib/test_script_commands.tcl"]} {
+    source lib/test_script_commands.tcl
+    puts "Loaded test script commands module"
+}
+if {[file exists "lib/uart_script_commands.tcl"]} {
+    source lib/uart_script_commands.tcl
+    puts "Loaded UART script commands module"
+}
+
 #--------------------------------------------------------------------
 # This function parses an INI configuration file
 #
@@ -88,7 +103,7 @@ proc parse_ini_file {ini_file} {
         # Use regexp to match [section] pattern
         if {[regexp {^\[([^\]]+)\]$} $line match section_name]} {
             set current_section $section_name
-            puts "Found section: $current_section"
+            # puts "Found section: $current_section"
             continue
         }
         
@@ -111,7 +126,7 @@ proc parse_ini_file {ini_file} {
             }
             
             set script_config_array($full_key) $value
-            puts "  $full_key = $value"
+            # puts "  $full_key = $value"
         }
     }
     
@@ -1264,17 +1279,86 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
         poll_response_register
 
     } elseif {$mode == "script"} {
-        puts "Mode: Script - Automated operation"
-        puts "Running INI-based script mode..."
-        run_script_mode_from_ini $::script_config_file
-        
-        if {$boot_mode == "jtag"} {
+        # Determine which script mode based on boot_mode
+        if {$boot_mode == "jtag_script"} {
+            # JTAG Script Mode: Commands sent through registers
+            puts "Mode: Script - JTAG Script Mode (register-based commands)"
+            puts "Running INI-based script mode..."
+            run_script_mode_from_ini $::script_config_file
+            
             if {![download_app_and_init_shared_memory $app_elf $::MODE_JTAG_SCRIPT true]} {
                 puts "ERROR: Failed to download application and initialize shared memory"
-                log_message "ERROR: Failed to download application and initialize shared memory in script mode"
+                log_message "ERROR: Failed to download application and initialize shared memory in JTAG script mode"
                 return 1
             }
+            
+            puts "Place A53_0 into execution state..."
+            if {[catch {con} err]} {
+                puts "ERROR: Failed to continue execution: $err"
+                log_message "ERROR: Failed to continue execution: $err"
+                return 1
+            }
+            
+            # Execute predetermined JTAG script commands
+            execute_script_commands "jtag_script"
+            
+            # Poll response register in a loop to keep the tcp socket alive
+            poll_response_register
+            
+        } elseif {$boot_mode == "uart" || $boot_mode == "uart_script"} {
+            # UART Script Mode: Commands sent over UART (start, stop, exit)
+            puts "Mode: Script - UART Script Mode (UART commands)"
+            puts "Running INI-based script mode..."
+            run_script_mode_from_ini $::script_config_file
+            
+            if {![download_app_and_init_shared_memory $app_elf $::MODE_UART_SCRIPT true]} {
+                puts "ERROR: Failed to download application and initialize shared memory"
+                log_message "ERROR: Failed to download application and initialize shared memory in UART script mode"
+                return 1
+            }
+            
+            puts "Place A53_0 into execution state..."
+            if {[catch {con} err]} {
+                puts "ERROR: Failed to continue execution: $err"
+                log_message "ERROR: Failed to continue execution: $err"
+                return 1
+            }
+            
+            # Start terminal for UART communication
+            exec $term_app localhost $tcp_port_num &
+            
+            # Execute predetermined UART script commands
+            execute_script_commands "uart_script" $tcp_port_num
+            
+            # For UART script mode, send commands over UART instead of polling registers
+            # The application will process UART commands (start, stop, exit)
+            puts "UART Script Mode: Application running and listening for UART commands"
+            puts "Send commands via UART connection (start, stop, exit)"
+            log_message "UART Script Mode active - listening for UART commands"
+            
+            # Poll response register to keep the connection alive
+            # In UART script mode, the application processes UART commands directly
+            # but we still poll to maintain the connection
+            poll_response_register
+            
+        } else {
+            puts "ERROR: Invalid boot_mode '$boot_mode' for script mode"
+            puts "Valid boot_mode values for script mode: 'jtag_script', 'uart', 'uart_script'"
+            log_message "ERROR: Invalid boot_mode '$boot_mode' for script mode"
+            return 1
         }
+    } elseif {$mode == "test"} {
+        # Test Mode: Similar to jtag_script but with test functionality
+        puts "Mode: Test - Test operation (register-based with test commands)"
+        puts "Running INI-based test mode..."
+        run_script_mode_from_ini $::script_config_file
+        
+        if {![download_app_and_init_shared_memory $app_elf $::MODE_TEST true]} {
+            puts "ERROR: Failed to download application and initialize shared memory"
+            log_message "ERROR: Failed to download application and initialize shared memory in test mode"
+            return 1
+        }
+        
         puts "Place A53_0 into execution state..."
         if {[catch {con} err]} {
             puts "ERROR: Failed to continue execution: $err"
@@ -1282,13 +1366,17 @@ proc run_device_connection {hw_server mode boot_mode term_app app_elf} {
             return 1
         }
         
+        # Execute predetermined test script commands
+        execute_script_commands "test"
+        
+        # Test mode uses register-based communication with test commands
+        # Poll response register and handle test-specific commands
+        puts "Test Mode: Application running with test command support"
+        log_message "Test Mode active - using register-based test commands"
+        
         # Poll response register in a loop to keep the tcp socket alive
+        # Test mode will handle test commands (START_TEST, RUN_TEST, GET_TEST_STATUS)
         poll_response_register
-    } elseif {$mode == "test"} {
-        puts "Mode: Test - Test operation"
-        puts "Test mode not yet implemented"
-        log_message "Test mode requested but not yet implemented"
-        return 1
     } else {
         puts "ERROR: Invalid mode '$mode'. Must be 'jtag', 'script', or 'test'"
         log_message "ERROR: Invalid mode '$mode'"
@@ -1372,7 +1460,24 @@ proc init_app {} {
                 }
                 set bit_file [get_ini_config "application.bit_file" $bit_file]
                 set log_dir [get_ini_config "logging.log_dir" $log_dir]
+                set log_file [get_ini_config "logging.log_file" ""]
                 set app_elf [get_ini_config "application.app_elf_file" $app_elf]
+                
+                # Create log directory if it doesn't exist
+                if {$log_dir != ""} {
+                    if {![file exists $log_dir]} {
+                        file mkdir $log_dir
+                        puts "Created log directory: $log_dir"
+                    }
+                    
+                    # Ensure log_file is in the log_dir (if log_file is provided)
+                    if {$log_file != ""} {
+                        # If log_file doesn't contain a path separator, prepend log_dir
+                        if {[string first "/" $log_file] == -1 && [string first "\\" $log_file] == -1} {
+                            set log_file [file join $log_dir $log_file]
+                        }
+                    }
+                }
                 set hw_server [get_ini_config "connection.hw_server" $hw_server]
                 # Convert localhost to 127.0.0.1 if needed
                 if {[string tolower $hw_server] == "localhost"} {
@@ -1387,6 +1492,9 @@ proc init_app {} {
                 set ::fsbl_path $fsbl_path
                 set ::bit_file $bit_file
                 set ::log_dir $log_dir
+                if {[info exists log_file] && $log_file != ""} {
+                    set ::log_file $log_file
+                }
                 set ::ps_app_elf_file $app_elf
                 set ::hw_server $hw_server
                 set ::term_app $term_app
@@ -3224,6 +3332,7 @@ proc generate_boot_bin {{output_bin "./BOOT.bin"} {bif_file "./boot.bif"} {arch 
 #--------------------------------------------------------------------
 proc run_script_mode_from_ini {ini_file} {
     global script_config_array script_mode_enabled
+    global boot_mode tcp_port_num
     
     puts "Starting INI-based script mode..."
     log_message "Starting INI-based script mode with file: $ini_file"
@@ -3236,8 +3345,32 @@ proc run_script_mode_from_ini {ini_file} {
     
     # Get configuration values (addresses are known from constants, not needed from INI)
     # Use get_ini_config which properly accesses the global script_config_array
+    set log_dir [get_ini_config "logging.log_dir" "output"]
     set log_file [get_ini_config "logging.log_file" "script_log.txt"]
     set bit_file [get_ini_config "application.bit_file" ""]
+    
+    # Get boot_mode from INI config (if not already set globally)
+    if {![info exists boot_mode] || $boot_mode == ""} {
+        set boot_mode [get_ini_config "application.boot_mode" "jtag_script"]
+        set ::boot_mode $boot_mode  # Also set global
+    } else {
+        # Use existing global boot_mode
+        set boot_mode $::boot_mode
+    }
+    
+    # Create log directory if it doesn't exist
+    if {$log_dir != ""} {
+        if {![file exists $log_dir]} {
+            file mkdir $log_dir
+            puts "Created log directory: $log_dir"
+        }
+        
+        # Ensure log_file is in the log_dir
+        # If log_file doesn't contain a path separator, prepend log_dir
+        if {[string first "/" $log_file] == -1 && [string first "\\" $log_file] == -1} {
+            set log_file [file join $log_dir $log_file]
+        }
+    }
     
     # Use global hw_server (already set from INI in init_app)
     if {[info exists ::hw_server]} {
@@ -3252,8 +3385,25 @@ proc run_script_mode_from_ini {ini_file} {
     puts "  Bit File: $bit_file"
     
     # Set script mode in startup register (using same approach as user mode)
-    puts "Setting script mode in startup register..."
-    if {[catch {mwr [expr $::shared_mem_base + $::STARTUP_MODE_REG_OFFSET] $::MODE_JTAG_SCRIPT} err]} {
+    # Determine startup mode based on boot_mode (default to JTAG_SCRIPT for backward compatibility)
+    set startup_mode $::MODE_JTAG_SCRIPT
+    if {[info exists ::boot_mode]} {
+        switch -nocase $::boot_mode {
+            "jtag_script" {
+                set startup_mode $::MODE_JTAG_SCRIPT
+            }
+            "uart" -
+            "uart_script" {
+                set startup_mode $::MODE_UART_SCRIPT
+            }
+            default {
+                set startup_mode $::MODE_JTAG_SCRIPT
+            }
+        }
+    }
+    
+    puts "Setting script mode in startup register (mode: 0x[format %08X $startup_mode])..."
+    if {[catch {mwr [expr $::shared_mem_base + $::STARTUP_MODE_REG_OFFSET] $startup_mode} err]} {
         set error_msg "Failed to set startup mode register: $err"
         puts "ERROR: $error_msg"
         log_message "ERROR: $error_msg"
@@ -3284,8 +3434,9 @@ proc run_script_mode_from_ini {ini_file} {
     }
     
     # Download and initialize application (using same function as user mode)
+    # Use the startup_mode determined above
     if {[info exists ::ps_app_elf_file] && $::ps_app_elf_file != ""} {
-        if {![download_app_and_init_shared_memory $::ps_app_elf_file $::MODE_JTAG_SCRIPT true]} {
+        if {![download_app_and_init_shared_memory $::ps_app_elf_file $startup_mode true]} {
             set error_occurred 1
             set error_message "Failed to download application and initialize shared memory"
             puts "ERROR: $error_message"
@@ -3298,13 +3449,27 @@ proc run_script_mode_from_ini {ini_file} {
         log_message "WARNING: $warning_msg"
     }
     
-    # Start JTAG terminal logging
-    puts "Starting JTAG terminal logging to: $log_file"
-    if {[catch {jtagterminal -start -file $log_file} err]} {
-        set warning_msg "Warning: Failed to start JTAG terminal logging: $err"
+    # Start JTAG terminal
+    # Note: jtagterminal doesn't support -file option for direct logging
+    # The terminal output will be available via the socket connection
+    puts "Starting JTAG terminal..."
+    # Default TCP port for UART communication
+    set tcp_port_num 3121
+    if {[catch {jtagterminal -start} err]} {
+        set warning_msg "Warning: Failed to start JTAG terminal: $err"
         puts "WARNING: $warning_msg"
         log_message "WARNING: $warning_msg"
         # Continue execution as this is not critical
+    } else {
+        puts "JTAG terminal started. Output can be captured via socket connection."
+        log_message "JTAG terminal started successfully"
+        # Get TCP port number from jtagterminal for UART script mode
+        if {[catch {set tcp_port_num [jtagterminal -socket]} err]} {
+            puts "WARNING: Could not get TCP port from jtagterminal, using default: 3121"
+            set tcp_port_num 3121
+        } else {
+            puts "TCP port number: $tcp_port_num"
+        }
     }
     
     # Continue execution
@@ -3317,19 +3482,35 @@ proc run_script_mode_from_ini {ini_file} {
         return 0
     }
     
-    # Execute script commands from INI file
-    # execute_script_commands_from_ini
+    # Execute predetermined script commands based on boot_mode
+    puts "Executing script commands for boot_mode: $boot_mode"
+    log_message "Executing script commands for boot_mode: $boot_mode"
+    
+    if {$boot_mode == "jtag_script"} {
+        execute_script_commands "jtag_script"
+    } elseif {$boot_mode == "uart" || $boot_mode == "uart_script"} {
+        execute_script_commands "uart_script" $tcp_port_num
+    } elseif {$boot_mode == "test"} {
+        execute_script_commands "test"
+    } else {
+        puts "WARNING: Unknown boot_mode '$boot_mode', defaulting to jtag_script"
+        log_message "WARNING: Unknown boot_mode '$boot_mode', defaulting to jtag_script"
+        execute_script_commands "jtag_script"
+    }
     
     # Poll response register in a loop to keep the tcp socket alive
     poll_response_register
     
-    # Stop JTAG terminal logging
-    puts "Stopping JTAG terminal logging..."
+    # Stop JTAG terminal
+    puts "Stopping JTAG terminal..."
     if {[catch {jtagterminal -stop} err]} {
-        set warning_msg "Warning: Failed to stop JTAG terminal logging: $err"
+        set warning_msg "Warning: Failed to stop JTAG terminal: $err"
         puts "WARNING: $warning_msg"
         log_message "WARNING: $warning_msg"
         # Continue as this is not critical
+    } else {
+        puts "JTAG terminal stopped successfully"
+        log_message "JTAG terminal stopped successfully"
     }
     
     log_message "INI-based script mode completed"
@@ -3342,6 +3523,63 @@ proc run_script_mode_from_ini {ini_file} {
 #
 #--------------------------------------------------------------------
 #
+#--------------------------------------------------------------------
+#--------------------------------------------------------------------
+# This function executes predetermined script commands based on mode
+#
+# Routes to the appropriate script command execution function based on
+# the specified mode:
+# - "jtag_script": Executes JTAG script mode commands (register-based)
+# - "test": Executes test script mode commands (register-based with tests)
+# - "uart_script": Executes UART script mode commands (UART-based)
+#
+# @param mode Script mode ("jtag_script", "test", or "uart_script")
+# @param uart_port Optional TCP port for UART communication (default: 3121)
+# @return 0 on success, 1 on failure
+#--------------------------------------------------------------------
+proc execute_script_commands {mode {uart_port 3121}} {
+    puts "Executing predetermined script commands for mode: $mode"
+    log_message "Executing predetermined script commands for mode: $mode"
+    
+    set result 0
+    
+    switch $mode {
+        "jtag_script" {
+            if {[catch {execute_jtag_script_commands} err]} {
+                puts "ERROR: Failed to execute JTAG script commands: $err"
+                log_message "ERROR: Failed to execute JTAG script commands: $err"
+                set result 1
+            }
+        }
+        "test" {
+            if {[catch {execute_test_script_commands} err]} {
+                puts "ERROR: Failed to execute test script commands: $err"
+                log_message "ERROR: Failed to execute test script commands: $err"
+                set result 1
+            }
+        }
+        "uart_script" {
+            if {[catch {execute_uart_script_commands $uart_port} err]} {
+                puts "ERROR: Failed to execute UART script commands: $err"
+                log_message "ERROR: Failed to execute UART script commands: $err"
+                set result 1
+            }
+        }
+        default {
+            puts "ERROR: Unknown script mode: $mode"
+            puts "Valid modes: jtag_script, test, uart_script"
+            log_message "ERROR: Unknown script mode: $mode"
+            set result 1
+        }
+    }
+    
+    return $result
+}
+
+#--------------------------------------------------------------------
+# This function executes script commands from INI file (legacy)
+#
+# @deprecated This function is deprecated. Use execute_script_commands instead.
 #--------------------------------------------------------------------
 proc execute_script_commands_from_ini {} {
     global script_config_array
